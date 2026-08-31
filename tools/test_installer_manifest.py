@@ -69,10 +69,10 @@ class InstallerManifestTests(unittest.TestCase):
         self.assertIn('marauder-installer-assets.zip', installer_workflow)
         self.assertNotIn('release-assets/*.bin\n', installer_workflow)
         self.assertEqual(len(registry["targets"]), 26)
-        self.assertEqual(len(boards), 23)
+        self.assertEqual(len(boards), 24)
         self.assertEqual(
             private_flags,
-            {"MARAUDER_V8", "MARAUDER_MINI_V3", "DUAL_MINI_C5"},
+            {"MARAUDER_V8", "DUAL_MINI_C5"},
         )
         self.assertEqual(registry_flags - private_flags, workflow_flags)
         self.assertIn("MARAUDER_T_DONGLE_C5", workflow_flags)
@@ -96,6 +96,10 @@ class InstallerManifestTests(unittest.TestCase):
                 "FlashSize=8M",
                 "PartitionScheme=default_8MB",
             ),
+            "MARAUDER_MINI_V3": (
+                "FlashSize=8M",
+                "PartitionScheme=custom",
+            ),
         }
         for flag, fqbn in normal_fqbns.items():
             if flag in layout_exceptions:
@@ -111,6 +115,14 @@ class InstallerManifestTests(unittest.TestCase):
         )
         self.assertIn(
             "cp installer/partitions/t_dongle_c5.csv esp32_marauder/partitions.csv",
+            workflow,
+        )
+        self.assertIn(
+            "if: matrix.board.flag == 'MARAUDER_MINI_V3'",
+            workflow,
+        )
+        self.assertIn(
+            "cp installer/partitions/mini_v3.csv esp32_marauder/partitions.csv",
             workflow,
         )
 

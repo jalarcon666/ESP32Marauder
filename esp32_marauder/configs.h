@@ -40,6 +40,10 @@
   //#define DUAL_MINI_C5
   //// END BOARD TARGETS
 
+  #if defined(MARAUDER_MINI_V3) && !defined(ARDUINO_ESP32C5_DEV)
+    #error "MARAUDER_MINI_V3 requires the ESP32-C5 board target"
+  #endif
+
   #define JSON_SETTING_SIZE 2048
 
 #define MARAUDER_VERSION "v1.15.1"
@@ -2088,15 +2092,16 @@
       #define CHAN_PER_PAGE 7
 
       #define SCREEN_CHAR_WIDTH 40
-      #define TFT_MISO 19
-      #define TFT_MOSI 23
-      #define TFT_SCLK 18
-      #define TFT_CS 27
-      #define TFT_DC 26
-      #define TFT_RST 5
-      #define TFT_BL 32
-      #define TOUCH_CS 21
-      #define SD_CS 4
+      // Production ESP32-C5 Mini V3 display/SD bus wiring.
+      #define TFT_MISO 2
+      #define TFT_MOSI 7
+      #define TFT_SCLK 6
+      #define TFT_CS 23
+      #define TFT_DC 24
+      #define TFT_RST -1
+      #define TFT_BL 5
+      #define TOUCH_CS -1
+      #define SD_CS 10
 
       #define SCREEN_BUFFER
 
@@ -3100,9 +3105,9 @@
     #endif
 
     #ifdef MARAUDER_MINI_V3
-      #define SD_MISO TFT_MISO
-      #define SD_MOSI TFT_MOSI
-      #define SD_SCK  TFT_SCLK
+      #define SD_MISO 2
+      #define SD_MOSI 7
+      #define SD_SCK  6
     #endif
   #endif
   //// END STUPID CYD STUFF
