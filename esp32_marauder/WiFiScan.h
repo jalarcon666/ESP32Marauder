@@ -302,13 +302,6 @@ static const uint8_t DULT_STOP_SOUND_COMMAND[] = {
     0x01, 0x03
 };
 
-static NimBLEAddress pendingAddress(
-    "00:00:00:00:00:00",
-    BLE_ADDR_PUBLIC
-);
-
-bool connectionPending = false;
-bool operationInProgress = false;
 #endif
 
 #pragma pack(push, 1)

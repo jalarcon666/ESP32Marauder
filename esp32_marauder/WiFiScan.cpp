@@ -39,6 +39,12 @@ LinkedList<IPAddress>* ipList;
 LinkedList<ProbeReqSsid>* probe_req_ssids;
 LinkedList<BleDevice>* ble_devices;
 
+#ifdef HAS_BT
+static NimBLEAddress pendingAddress("00:00:00:00:00:00", BLE_ADDR_PUBLIC);
+static bool connectionPending = false;
+static bool operationInProgress = false;
+#endif
+
 size_t WiFiScan::retainedAccessPointCount() const {
   return access_points == nullptr ? 0 : access_points->size();
 }
@@ -51,12 +57,24 @@ size_t WiFiScan::retainedBleDeviceCount() const {
   return ble_devices == nullptr ? 0 : ble_devices->size();
 }
 
-extern "C" int ieee80211_raw_frame_sanity_check(int32_t arg, int32_t arg2, int32_t arg3){
-    if (arg == 31337)
-      return 1;
-    else
-      return 0;
-}
+#ifdef HAS_IDF_3
+  extern "C" int ieee80211_raw_frame_sanity_check(
+      int32_t arg, int32_t arg2, int32_t arg3);
+
+  extern "C" int __wrap_ieee80211_raw_frame_sanity_check(
+      int32_t arg, int32_t arg2, int32_t arg3) {
+    (void)arg2;
+    (void)arg3;
+    return arg == 31337 ? 1 : 0;
+  }
+#else
+  extern "C" int ieee80211_raw_frame_sanity_check(
+      int32_t arg, int32_t arg2, int32_t arg3) {
+    (void)arg2;
+    (void)arg3;
+    return arg == 31337 ? 1 : 0;
+  }
+#endif
 
 extern "C" {
   uint8_t esp_base_mac_addr[6];
@@ -2053,6 +2071,7 @@ int WiFiScan::clearList(uint8_t list_type) {
     ssids->clear();
     return num_cleared;
   }
+  return 0;
 }
 
 bool WiFiScan::addSSID(String essid) {
