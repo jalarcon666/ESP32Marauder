@@ -3494,7 +3494,7 @@ void MenuFunctions::RunSetup()
     this->changeMenu(&saveFileMenu, true);
   });
 
-  #ifndef HAS_MINI_SCREEN
+  #if !defined(HAS_MINI_SCREEN) || defined(MARAUDER_MINI_V3)
     this->addNodes(&deviceMenu, "Brightness", TFTYELLOW, BRIGHTNESS, [this]() {
       this->brightnessMode();
     });
@@ -4575,21 +4575,15 @@ void MenuFunctions::displayCurrentMenu(int start_index)
 // Hold top/bottom zone 1.5s to enter. TAP TOP = brighter, TAP BOTTOM = dimmer.
 // TAP MIDDLE or wait 3s = save & exit.
 // ============================================================
-#ifndef HAS_MINI_SCREEN
+#if !defined(HAS_MINI_SCREEN)
   void MenuFunctions::brightnessMode() {
     extern void brightnessSave(uint8_t level);
+    extern void brightnessPreview(uint8_t level);
     extern uint8_t getBrightnessLevel();
 
     const uint8_t levels[] = {26, 51, 77, 102, 128, 153, 179, 204, 230, 255};
     const uint8_t numLevels = 10;
     uint8_t level = getBrightnessLevel();
-
-    // LEDC write compatibility (2.x vs 3.x board package)
-    #if ESP_ARDUINO_VERSION_MAJOR >= 3
-      #define BL_PREVIEW(duty) ledcWrite(TFT_BL, (duty))
-    #else
-      #define BL_PREVIEW(duty) ledcWrite(0, (duty))
-    #endif
 
     display_obj.tft.fillScreen(TFT_BLACK);
     display_obj.tft.setTextColor(TFT_CYAN, TFT_BLACK);
@@ -4634,13 +4628,13 @@ void MenuFunctions::displayCurrentMenu(int start_index)
         if (ty < zoneUp) {
           if (level < numLevels - 1) {
             level++;
-            BL_PREVIEW(levels[level]);
+            brightnessPreview(level);
             drawBar();
           }
         } else if (ty >= zoneDown) {
           if (level > 0) {
             level--;
-            BL_PREVIEW(levels[level]);
+            brightnessPreview(level);
             drawBar();
           }
         } else {
@@ -4653,7 +4647,93 @@ void MenuFunctions::displayCurrentMenu(int start_index)
       delay(30);
     }
 
-    #undef BL_PREVIEW
+    this->changeMenu(current_menu, true);
+  }
+#elif defined(MARAUDER_MINI_V3)
+  void MenuFunctions::brightnessMode() {
+    extern void brightnessPreview(uint8_t level);
+    extern void brightnessSave(uint8_t level);
+    extern uint8_t getBrightnessLevel();
+
+    const uint8_t levels[] = {26, 51, 77, 102, 128,
+                              153, 179, 204, 230, 255};
+    const uint8_t numLevels = sizeof(levels) / sizeof(levels[0]);
+    uint8_t level = min(getBrightnessLevel(),
+                        static_cast<uint8_t>(numLevels - 1));
+    auto buttonDown = [](Switches& button) {
+      const int state = digitalRead(button.getPin());
+      return button.getPullup() ? state == LOW : state == HIGH;
+    };
+
+    display_obj.tft.fillScreen(TFT_BLACK);
+    display_obj.tft.setFreeFont(NULL);
+    display_obj.tft.setTextSize(1);
+    display_obj.tft.setTextWrap(false);
+    display_obj.tft.setTextColor(TFT_CYAN, TFT_BLACK);
+    display_obj.tft.drawCentreString("BRIGHTNESS", TFT_WIDTH / 2, 8, 1);
+
+    auto drawLevel = [&]() {
+      const int16_t barX = 12;
+      const int16_t barY = 31;
+      const int16_t barW = TFT_WIDTH - 24;
+      const int16_t barH = 20;
+      const int16_t fillW =
+          (barW - 4) * static_cast<int16_t>(level + 1) / numLevels;
+
+      display_obj.tft.fillRect(0, 27, TFT_WIDTH, 54, TFT_BLACK);
+      display_obj.tft.drawRoundRect(barX, barY, barW, barH, 3, TFT_DARKGREY);
+      display_obj.tft.fillRoundRect(barX + 2, barY + 2, fillW, barH - 4,
+                                    2, TFT_CYAN);
+      display_obj.tft.setTextColor(TFT_WHITE, TFT_BLACK);
+      const String value = String(levels[level] * 100 / 255) + "%  " +
+                           String(level + 1) + "/" + String(numLevels);
+      display_obj.tft.drawCentreString(value, TFT_WIDTH / 2, 60, 2);
+    };
+
+    display_obj.tft.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
+    display_obj.tft.drawCentreString("UP/RIGHT: BRIGHTER", TFT_WIDTH / 2, 89, 1);
+    display_obj.tft.drawCentreString("DOWN/LEFT: DIMMER", TFT_WIDTH / 2, 102, 1);
+    display_obj.tft.setTextColor(TFT_GREEN, TFT_BLACK);
+    display_obj.tft.drawCentreString("CENTER: SAVE", TFT_WIDTH / 2, 115, 1);
+    drawLevel();
+
+    while (buttonDown(c_btn)) {
+      c_btn.justPressed();
+      delay(10);
+    }
+    c_btn.justPressed();
+
+    while (true) {
+      bool changed = false;
+      if (u_btn.justPressed() || r_btn.justPressed()) {
+        if (level < numLevels - 1) {
+          level++;
+          changed = true;
+        }
+      }
+      else if (d_btn.justPressed() || l_btn.justPressed()) {
+        if (level > 0) {
+          level--;
+          changed = true;
+        }
+      }
+      else if (c_btn.justPressed()) {
+        brightnessSave(level);
+        while (buttonDown(c_btn)) {
+          c_btn.justPressed();
+          delay(10);
+        }
+        c_btn.justPressed();
+        break;
+      }
+
+      if (changed) {
+        brightnessPreview(level);
+        drawLevel();
+      }
+      delay(20);
+    }
+
     this->changeMenu(current_menu, true);
   }
 #endif

@@ -130,20 +130,25 @@ uint32_t currentTime  = 0;
   Preferences bl_prefs;
 #endif
 
-// Helper macros for LEDC API compatibility (2.x vs 3.x board package)
-#ifdef HAS_SCREEN
-  #ifndef HAS_MINI_SCREEN
-    #if ESP_ARDUINO_VERSION_MAJOR >= 3
-      #define BL_SETUP()       ledcAttach(TFT_BL, BL_FREQ, BL_RESOLUTION)
-      #define BL_SET(duty)     ledcWrite(TFT_BL, (duty))
-    #else
-      #define BL_SETUP()       do { ledcSetup(BL_CHANNEL, BL_FREQ, BL_RESOLUTION); ledcAttachPin(TFT_BL, BL_CHANNEL); } while(0)
-      #define BL_SET(duty)     ledcWrite(BL_CHANNEL, (duty))
-    #endif
+// Helper macros for LEDC API compatibility (2.x vs 3.x board package).
+// Mini V3 uses an active-low backlight, so its PWM duty is inverted.
+#if defined(HAS_SCREEN) && (!defined(HAS_MINI_SCREEN) || defined(MARAUDER_MINI_V3))
+  #if defined(MARAUDER_MINI) || defined(MARAUDER_MINI_V3)
+    #define BL_PWM_DUTY(brightness) (255U - (uint8_t)(brightness))
+  #else
+    #define BL_PWM_DUTY(brightness) ((uint8_t)(brightness))
+  #endif
+
+  #if ESP_ARDUINO_VERSION_MAJOR >= 3
+    #define BL_SETUP()       ledcAttach(TFT_BL, BL_FREQ, BL_RESOLUTION)
+    #define BL_SET(duty)     ledcWrite(TFT_BL, BL_PWM_DUTY(duty))
+  #else
+    #define BL_SETUP()       do { ledcSetup(BL_CHANNEL, BL_FREQ, BL_RESOLUTION); ledcAttachPin(TFT_BL, BL_CHANNEL); } while(0)
+    #define BL_SET(duty)     ledcWrite(BL_CHANNEL, BL_PWM_DUTY(duty))
   #endif
 #endif
 
-#ifndef HAS_MINI_SCREEN
+#if !defined(HAS_MINI_SCREEN) || defined(MARAUDER_MINI_V3)
   void brightnessInit() {
     #ifdef HAS_SCREEN
       BL_SETUP();
@@ -174,6 +179,13 @@ uint32_t currentTime  = 0;
       return bl_level_idx;
     #else
       return 0;
+    #endif
+  }
+
+  void brightnessPreview(uint8_t level) {
+    #ifdef HAS_SCREEN
+      if (level >= BL_NUM_LEVELS) level = BL_NUM_LEVELS - 1;
+      BL_SET(BL_LEVELS[level]);
     #endif
   }
 
@@ -224,8 +236,12 @@ uint32_t currentTime  = 0;
 #endif
 
 #ifdef HAS_C5_SD
-  SPIClass sharedSPI(SPI);
-  SDInterface sd_obj = SDInterface(&sharedSPI, SD_CS);
+  #ifdef MARAUDER_MINI_V3
+    SDInterface sd_obj = SDInterface(&SPI, SD_CS);
+  #else
+    SPIClass sharedSPI(SPI);
+    SDInterface sd_obj = SDInterface(&sharedSPI, SD_CS);
+  #endif
 #endif
 
 void setup()
@@ -252,7 +268,11 @@ void setup()
     delay(10);
 
   #ifdef HAS_C5_SD
-    sharedSPI.begin(SD_SCK, SD_MISO, SD_MOSI);
+    #ifdef MARAUDER_MINI_V3
+      SPI.begin(SD_SCK, SD_MISO, SD_MOSI);
+    #else
+      sharedSPI.begin(SD_SCK, SD_MISO, SD_MOSI);
+    #endif
     delay(100);
   #endif
 
@@ -314,7 +334,7 @@ void setup()
   #endif
 
   // Init PWM brightness AFTER display init (so ledcAttach overrides TFT_eSPI's pinMode)
-  #ifndef HAS_MINI_SCREEN
+  #if !defined(HAS_MINI_SCREEN) || defined(MARAUDER_MINI_V3)
     brightnessInit();
     backlightOff();
   #endif
