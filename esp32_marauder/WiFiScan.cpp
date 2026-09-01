@@ -12728,14 +12728,48 @@ void WiFiScan::main(uint32_t currentTime)
   else if (currentScanMode == WIFI_ATTACK_DEAUTH) {
     uint8_t dst_mac_bytes[6];
     convertMacStringToUint8(this->dst_mac, dst_mac_bytes);
+    uint16_t selected_targets = 0;
     for (int i = 0; i < access_points->size(); i++) {
       AccessPoint access_point = access_points->get(i);
       if (access_point.selected) {
+        selected_targets++;
         for (int i = 0; i < 55; i++) {
           this->sendDeauthFrame(access_point.bssid, access_point.channel, dst_mac_bytes);
         }
       }
     }
+
+    #ifdef MARAUDER_MINI_V3
+      if (currentTime - this->last_ui_update >= 250) {
+        this->last_ui_update = currentTime;
+        #ifdef HAS_SCREEN
+          display_obj.tft.fillRect(0, 34, TFT_WIDTH, TFT_HEIGHT - 34, TFT_BLACK);
+          display_obj.tft.setTextSize(1);
+          display_obj.tft.setTextDatum(TL_DATUM);
+          display_obj.tft.setTextColor(TFT_WHITE, TFT_BLACK);
+          display_obj.tft.drawString(String("Targets: ") + selected_targets, 4, 40, 1);
+          display_obj.tft.setTextColor(deauth_tx_failed == 0 ? TFT_GREEN : TFT_ORANGE,
+                                       TFT_BLACK);
+          display_obj.tft.drawString(String("TX OK: ") + packets_sent, 4, 56, 1);
+          display_obj.tft.setTextColor(deauth_tx_failed == 0 ? TFT_LIGHTGREY : TFT_RED,
+                                       TFT_BLACK);
+          display_obj.tft.drawString(String("TX ERR: ") + deauth_tx_failed, 4, 72, 1);
+          display_obj.tft.setTextColor(wsl_bypass_enabled ? TFT_GREEN : TFT_RED, TFT_BLACK);
+          display_obj.tft.drawString(
+              String("Raw bypass: ") + (wsl_bypass_enabled ? "OK" : "FAIL"),
+              4, 88, 1);
+          if (selected_targets == 0) {
+            display_obj.tft.setTextColor(TFT_RED, TFT_BLACK);
+            display_obj.tft.drawString("NO TARGET SELECTED", 4, 104, 1);
+          }
+        #endif
+        Serial.printf("Deauth targets=%u tx_ok=%lu tx_err=%lu bypass=%s\n",
+                      selected_targets,
+                      static_cast<unsigned long>(packets_sent),
+                      static_cast<unsigned long>(deauth_tx_failed),
+                      wsl_bypass_enabled ? "ok" : "fail");
+      }
+    #endif
   }
 
   #ifdef MARAUDER_MINI_V3

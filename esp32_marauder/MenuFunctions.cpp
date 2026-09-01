@@ -334,14 +334,34 @@ void MenuFunctions::updateMiniMenuMarquee(uint32_t current_time) {
 void MenuFunctions::selectMiniMenuIndex(int target_index) {
   if (!current_menu || !current_menu->list || current_menu->list->size() == 0)
     return;
-  target_index = constrain(target_index, 0, current_menu->list->size() - 1);
+  const int item_count = current_menu->list->size();
+  target_index = constrain(target_index, 0, item_count - 1);
   const int previous_index = current_menu->selected;
   if (target_index == previous_index)
     return;
   current_menu->selected = target_index;
   resetMiniMenuMarquee();
-  if (target_index < menu_start_index || target_index >= menu_start_index + BUTTON_SCREEN_LIMIT) {
-    const int new_start = target_index < menu_start_index ? target_index : target_index + 1 - BUTTON_SCREEN_LIMIT;
+
+  int new_start = menu_start_index;
+  const bool fixed_layout = current_menu == &mainMenu ||
+                            current_menu == &wifiMenu ||
+                            current_menu == &bluetoothMenu;
+  if (!fixed_layout && item_count > BUTTON_SCREEN_LIMIT) {
+    // Keep the cursor around the middle of long lists. This makes the content
+    // follow the selection instead of waiting until the cursor hits the final
+    // visible row before paging.
+    const int maximum_start = item_count - BUTTON_SCREEN_LIMIT;
+    new_start = constrain(target_index - (BUTTON_SCREEN_LIMIT / 2),
+                          0, maximum_start);
+  }
+  else if (target_index < menu_start_index ||
+           target_index >= menu_start_index + BUTTON_SCREEN_LIMIT) {
+    new_start = target_index < menu_start_index
+                    ? target_index
+                    : target_index + 1 - BUTTON_SCREEN_LIMIT;
+  }
+
+  if (new_start != menu_start_index) {
     buildButtons(current_menu, new_start);
     displayCurrentMenu(new_start);
     return;
