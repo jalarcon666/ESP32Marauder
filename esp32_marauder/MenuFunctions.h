@@ -196,6 +196,8 @@ class MenuFunctions
     #endif*/
     Menu wifiGeneralMenu;
     Menu wifiAPMenu;
+    Menu ssidGroupMenu;
+    Menu ssidAPMenu;
     Menu wifiIPMenu;
     Menu ssidsMenu;
     //#ifdef HAS_BT
@@ -256,6 +258,12 @@ class MenuFunctions
     void drawGraphSmall(uint8_t *values);
     void renderGraphUI(uint8_t scan_mode = 0);
     void addNodes(Menu* menu, const char* name, uint8_t color, int place, std::function<void()> callable, bool selected = false);
+    #ifdef MARAUDER_MINI_V3
+      void buildSSIDGroupMenu(bool fox_hunt_mode = false,
+                              bool finder_mode = false);
+      void buildSSIDAPMenu(const String& group_name,
+                           bool fox_hunt_mode = false);
+    #endif
     void battery(bool initial = false);
     void battery2(bool initial = false);
     const char* callSetting(const char* key);

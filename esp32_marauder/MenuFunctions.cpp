@@ -174,7 +174,8 @@ void MenuFunctions::main(uint32_t currentTime)
     if (currentTime - initTime >= BANNER_TIME) {
       this->initTime = millis();
       if ((wifi_scan_obj.currentScanMode != LV_JOIN_WIFI) &&
-          (wifi_scan_obj.currentScanMode != LV_ADD_SSID))
+          (wifi_scan_obj.currentScanMode != LV_ADD_SSID) &&
+          (wifi_scan_obj.currentScanMode != WIFI_SCAN_SSID_FINDER))
         this->updateStatusBar();
       
       // Do channel analyzer stuff
@@ -206,8 +207,10 @@ void MenuFunctions::main(uint32_t currentTime)
   // Get the display buffer out of the way
   if ((wifi_scan_obj.currentScanMode != WIFI_SCAN_OFF ) &&
       (wifi_scan_obj.currentScanMode != WIFI_CONNECTED) &&
+      (wifi_scan_obj.currentScanMode != WIFI_SCAN_SSID_FINDER) &&
       (wifi_scan_obj.currentScanMode != WIFI_ATTACK_BEACON_SPAM) &&
       (wifi_scan_obj.currentScanMode != WIFI_ATTACK_AP_SPAM) &&
+      (wifi_scan_obj.currentScanMode != WIFI_ATTACK_SSID_GROUP_CLONE) &&
       (wifi_scan_obj.currentScanMode != WIFI_ATTACK_CSA) &&
       (wifi_scan_obj.currentScanMode != WIFI_ATTACK_QUIET) &&
       (wifi_scan_obj.currentScanMode != WIFI_ATTACK_AUTH) &&
@@ -386,6 +389,26 @@ void MenuFunctions::main(uint32_t currentTime)
       bool c_btn_press = c_btn.justPressed();
     #elif defined(MARAUDER_CARDPUTER) || defined(MARAUDER_CARDPUTER_ADV)
       bool c_btn_press = this->isKeyPressed('(');
+    #endif
+
+    #ifdef MARAUDER_MINI_V3
+      if (wifi_scan_obj.currentScanMode == WIFI_SCAN_SSID_FINDER) {
+        u_btn.justPressed();
+        d_btn.justPressed();
+        const bool left_pressed = l_btn.justPressed();
+        const bool right_pressed = r_btn.justPressed();
+
+        if (left_pressed) {
+          wifi_scan_obj.StartScan(WIFI_SCAN_OFF);
+          display_obj.init();
+          this->changeMenu(current_menu, true);
+        }
+        else if (c_btn_press)
+          wifi_scan_obj.toggleSSIDFinderLock();
+        else if (right_pressed)
+          wifi_scan_obj.markSSIDFinderFound();
+        return;
+      }
     #endif
 
     #ifndef HAS_ILI9341
@@ -1781,6 +1804,233 @@ void MenuFunctions::buildFoxTargetList(FoxHuntListKind type, int context_ap) {
   this->changeMenu(menu, true);
 }
 
+#ifdef MARAUDER_MINI_V3
+void MenuFunctions::buildSSIDGroupMenu(bool fox_hunt_mode,
+                                       bool finder_mode) {
+  ssidGroupMenu.list->clear();
+  ssidGroupMenu.name = finder_mode
+                           ? "SSID Finder"
+                           : (fox_hunt_mode ? "Fox Hunt SSID"
+                                            : "Select SSIDs");
+  ssidGroupMenu.parentMenu = &wifiSnifferMenu;
+
+  this->addNodes(&ssidGroupMenu, text09, TFTLIGHTGREY, 0,
+                 [this, fox_hunt_mode]() {
+    if (fox_hunt_mode) {
+      for (int index = 0; index < access_points->size(); index++) {
+        AccessPoint access_point = access_points->get(index);
+        access_point.selected = false;
+        access_points->set(index, access_point);
+      }
+    }
+    this->changeMenu(ssidGroupMenu.parentMenu, true);
+  });
+
+  if (access_points->size() == 0) {
+    this->addNodes(&ssidGroupMenu, "No APs - scan first", TFTORANGE,
+                   DEVICE_INFO, []() {});
+    return;
+  }
+
+  struct SSIDGroupSummary {
+    String name;
+    int8_t strongest_rssi;
+  };
+
+  std::vector<SSIDGroupSummary> groups;
+  for (int index = 0; index < access_points->size(); index++) {
+    const AccessPoint access_point = access_points->get(index);
+    int group_index = -1;
+    for (int candidate = 0;
+         candidate < static_cast<int>(groups.size()); candidate++) {
+      if (groups[candidate].name == access_point.essid) {
+        group_index = candidate;
+        break;
+      }
+    }
+
+    if (group_index < 0)
+      groups.push_back({access_point.essid, access_point.rssi});
+    else if (access_point.rssi > groups[group_index].strongest_rssi)
+      groups[group_index].strongest_rssi = access_point.rssi;
+  }
+
+  std::sort(groups.begin(), groups.end(),
+            [](const SSIDGroupSummary& left,
+               const SSIDGroupSummary& right) {
+    if (left.strongest_rssi != right.strongest_rssi)
+      return left.strongest_rssi > right.strongest_rssi;
+    return left.name.compareTo(right.name) < 0;
+  });
+
+  for (const SSIDGroupSummary& group : groups) {
+    const String group_name = group.name;
+    uint16_t ap_count = 0;
+    uint16_t channel_count = 0;
+    uint16_t selected_count = 0;
+    bool channels[256] = {};
+
+    for (int ap_index = 0; ap_index < access_points->size(); ap_index++) {
+      const AccessPoint access_point = access_points->get(ap_index);
+      if (access_point.essid != group_name)
+        continue;
+      ap_count++;
+      if (!channels[access_point.channel]) {
+        channels[access_point.channel] = true;
+        channel_count++;
+      }
+      if (access_point.selected)
+        selected_count++;
+    }
+
+    const String ssid_name = group_name.length() > 0
+                                 ? group_name
+                                 : String("<Hidden SSID>");
+    const String selection_count = finder_mode
+                                       ? String(ap_count)
+                                       : String(selected_count) + "/" +
+                                             String(ap_count);
+    const String display_name = String(group.strongest_rssi) + " " +
+                                ssid_name + " [" + selection_count +
+                                " AP, " + String(channel_count) + " CH]";
+
+    this->addNodes(&ssidGroupMenu, display_name.c_str(),
+                   rssiToMenuColor(group.strongest_rssi), WIFI,
+                   [this, group_name, fox_hunt_mode, finder_mode]() {
+      if (finder_mode) {
+        if (wifi_scan_obj.prepareSSIDFinder(group_name)) {
+          display_obj.clearScreen();
+          wifi_scan_obj.StartScan(WIFI_SCAN_SSID_FINDER, TFT_CYAN);
+        }
+        else {
+          Serial.println(F("[SSID Finder] No usable APs in selected SSID"));
+        }
+        return;
+      }
+
+      this->buildSSIDAPMenu(group_name, fox_hunt_mode);
+      this->changeMenu(&ssidAPMenu, true);
+    }, finder_mode ? false
+                   : (fox_hunt_mode ? selected_count > 0
+                                    : selected_count == ap_count));
+  }
+}
+
+void MenuFunctions::buildSSIDAPMenu(const String& group_name,
+                                    bool fox_hunt_mode) {
+  ssidAPMenu.list->clear();
+  ssidAPMenu.name = group_name.length() > 0 ? group_name : "Hidden SSID";
+  ssidAPMenu.parentMenu = &ssidGroupMenu;
+
+  this->addNodes(&ssidAPMenu, text09, TFTLIGHTGREY, 0,
+                 [this, fox_hunt_mode]() {
+    this->buildSSIDGroupMenu(fox_hunt_mode);
+    this->changeMenu(&ssidGroupMenu, true);
+  });
+
+  std::vector<int> group_ap_indices;
+  for (int index = 0; index < access_points->size(); index++) {
+    if (access_points->get(index).essid == group_name)
+      group_ap_indices.push_back(index);
+  }
+  std::sort(group_ap_indices.begin(), group_ap_indices.end(),
+            [](int left_index, int right_index) {
+    const AccessPoint left = access_points->get(left_index);
+    const AccessPoint right = access_points->get(right_index);
+    if (left.rssi != right.rssi)
+      return left.rssi > right.rssi;
+    return memcmp(left.bssid, right.bssid, sizeof(left.bssid)) < 0;
+  });
+
+  bool all_selected = !group_ap_indices.empty();
+  int fox_hunt_target_index = -1;
+  for (const int index : group_ap_indices) {
+    const AccessPoint access_point = access_points->get(index);
+    if (!access_point.selected)
+      all_selected = false;
+    else if (fox_hunt_mode)
+      fox_hunt_target_index = index;
+
+    const String display_name = String(access_point.rssi) + " dBm " +
+                                macToString(access_point.bssid) +
+                                " CH" + String(access_point.channel);
+    this->addNodes(&ssidAPMenu, display_name.c_str(),
+                   rssiToMenuColor(access_point.rssi), WIFI,
+                   [this, group_name, fox_hunt_mode, index]() {
+      if (index >= access_points->size() ||
+          access_points->get(index).essid != group_name)
+        return;
+
+      AccessPoint access_point = access_points->get(index);
+      const bool select_target = !access_point.selected;
+      if (fox_hunt_mode && select_target) {
+        for (int ap_index = 0; ap_index < access_points->size(); ap_index++) {
+          AccessPoint candidate = access_points->get(ap_index);
+          candidate.selected = false;
+          access_points->set(ap_index, candidate);
+        }
+      }
+      access_point.selected = select_target;
+      access_points->set(index, access_point);
+      this->buildSSIDAPMenu(group_name, fox_hunt_mode);
+      this->changeMenu(&ssidAPMenu, true);
+    }, access_point.selected);
+  }
+
+  if (group_ap_indices.empty()) {
+    this->addNodes(&ssidAPMenu, "No APs - scan first", TFTORANGE,
+                   DEVICE_INFO, []() {});
+    return;
+  }
+
+  if (fox_hunt_mode) {
+    if (fox_hunt_target_index >= 0) {
+      this->addNodes(&ssidAPMenu, "Start Fox Hunt", TFTGREEN, SCANNERS,
+                     [this, fox_hunt_target_index]() {
+        if (fox_hunt_target_index < 0 ||
+            fox_hunt_target_index >= access_points->size())
+          return;
+        const AccessPoint target = access_points->get(fox_hunt_target_index);
+        if (!target.selected)
+          return;
+        wifi_scan_obj.setFoxHuntTarget(target.bssid, target.essid,
+                                      target.rssi, target.channel, false);
+        display_obj.clearScreen();
+        this->drawStatusBar();
+        wifi_scan_obj.StartScan(WIFI_SCAN_SIG_STREN, TFT_CYAN);
+      });
+    }
+    return;
+  }
+
+  this->addNodes(&ssidAPMenu, "Select All", TFTGREEN, 255,
+                 [this, group_name]() {
+    bool whole_group_selected = true;
+    bool found_group_ap = false;
+    for (int index = 0; index < access_points->size(); index++) {
+      const AccessPoint access_point = access_points->get(index);
+      if (access_point.essid != group_name)
+        continue;
+      found_group_ap = true;
+      if (!access_point.selected)
+        whole_group_selected = false;
+    }
+
+    const bool select_group = !found_group_ap || !whole_group_selected;
+    for (int index = 0; index < access_points->size(); index++) {
+      AccessPoint access_point = access_points->get(index);
+      if (access_point.essid == group_name) {
+        access_point.selected = select_group;
+        access_points->set(index, access_point);
+      }
+    }
+
+    this->buildSSIDAPMenu(group_name, false);
+    this->changeMenu(&ssidAPMenu, true);
+  }, all_selected);
+}
+#endif
+
 void MenuFunctions::buildWiFiFoxHuntMenu() {
   foxHuntMenu.list->clear();
   foxHuntMenu.parentMenu = &wifiSnifferMenu;
@@ -1859,6 +2109,8 @@ void MenuFunctions::RunSetup()
   #endif*/
   wifiGeneralMenu.list = new LinkedList<MenuNode>();
   wifiAPMenu.list = new LinkedList<MenuNode>();
+  ssidGroupMenu.list = new LinkedList<MenuNode>();
+  ssidAPMenu.list = new LinkedList<MenuNode>();
   wifiIPMenu.list = new LinkedList<MenuNode>();
   apInfoMenu.list = new LinkedList<MenuNode>();
   setMacMenu.list = new LinkedList<MenuNode>();
@@ -1922,6 +2174,8 @@ void MenuFunctions::RunSetup()
   wifiScannerMenu.name = "Scanners";
   wifiAttackMenu.name = text_table1[21];
   wifiGeneralMenu.name = text_table1[22];
+  ssidGroupMenu.name = "Select SSIDs";
+  ssidAPMenu.name = "Access Points";
   saveFileMenu.name = "Save/Load Files";
   saveSSIDsMenu.name = "Save SSIDs";
   loadSSIDsMenu.name = "Load SSIDs";
@@ -2096,6 +2350,25 @@ void MenuFunctions::RunSetup()
   this->addNodes(&wifiSnifferMenu, text09, TFTLIGHTGREY, 0, [this]() {
     this->changeMenu(wifiSnifferMenu.parentMenu, true);
   });
+  #ifdef MARAUDER_MINI_V3
+    this->addNodes(&wifiSnifferMenu, "Scan SSIDs", TFTGREEN, BEACON_SNIFF,
+                   [this]() {
+      wifi_scan_obj.prepareSSIDGroupScan();
+      display_obj.clearScreen();
+      this->drawStatusBar();
+      wifi_scan_obj.StartScan(WIFI_SCAN_AP_STA, TFT_GREEN);
+    });
+    this->addNodes(&wifiSnifferMenu, "Select SSIDs", TFTGREEN,
+                   KEYBOARD_ICO, [this]() {
+      this->buildSSIDGroupMenu();
+      this->changeMenu(&ssidGroupMenu, true);
+    });
+    this->addNodes(&wifiSnifferMenu, "SSID Finder", TFTCYAN,
+                   SCANNERS, [this]() {
+      this->buildSSIDGroupMenu(false, true);
+      this->changeMenu(&ssidGroupMenu, true);
+    });
+  #endif
   this->addNodes(&wifiSnifferMenu, text_table1[42], TFTCYAN, PROBE_SNIFF, [this]() {
     display_obj.clearScreen();
     this->drawStatusBar();
@@ -2185,7 +2458,17 @@ void MenuFunctions::RunSetup()
     wifi_scan_obj.StartScan(WIFI_SCAN_SIG_STREN, TFT_CYAN);
   });*/
   this->addNodes(&wifiSnifferMenu, "Fox Hunt", TFTCYAN, SCANNERS, [this]() {
-    this->buildWiFiFoxHuntMenu();
+    #ifdef MARAUDER_MINI_V3
+      for (int index = 0; index < access_points->size(); index++) {
+        AccessPoint access_point = access_points->get(index);
+        access_point.selected = false;
+        access_points->set(index, access_point);
+      }
+      this->buildSSIDGroupMenu(true);
+      this->changeMenu(&ssidGroupMenu, true);
+    #else
+      this->buildWiFiFoxHuntMenu();
+    #endif
   });
   this->addNodes(&wifiSnifferMenu, "MAC Monitor", TFTMAGENTA, SCANNERS, [this]() {
     display_obj.clearScreen();
@@ -2318,6 +2601,20 @@ void MenuFunctions::RunSetup()
     this->drawStatusBar();
     wifi_scan_obj.StartScan(WIFI_ATTACK_DEAUTH_TARGETED, TFT_ORANGE);
   });
+  #ifdef MARAUDER_MINI_V3
+    this->addNodes(&wifiAttackMenu, "SSID Beacon Clone", TFTMAGENTA,
+                   BEACON_LIST, [this]() {
+      display_obj.clearScreen();
+      this->drawStatusBar();
+      wifi_scan_obj.StartScan(WIFI_ATTACK_SSID_GROUP_CLONE, TFT_MAGENTA);
+    });
+    this->addNodes(&wifiAttackMenu, "SSID Group Deauth", TFTRED,
+                   DEAUTH_SNIFF, [this]() {
+      display_obj.clearScreen();
+      this->drawStatusBar();
+      wifi_scan_obj.StartScan(WIFI_ATTACK_DEAUTH, TFT_RED);
+    });
+  #endif
 
   this->addNodes(&wifiAttackMenu, "Karma", TFTORANGE, KEYBOARD_ICO, [this](){
     // Add the back button

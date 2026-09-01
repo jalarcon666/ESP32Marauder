@@ -166,6 +166,8 @@
 #define BT_SCAN_FOX_HUNT 84
 #define BT_FINDMY_SOUND 85
 #define BT_ATTACK_FINDMY_LIVE 86
+#define WIFI_ATTACK_SSID_GROUP_CLONE 89
+#define WIFI_SCAN_SSID_FINDER 90
 
 #define WIFI_ATTACK_FUNNY_BEACON 99 
 
@@ -413,6 +415,49 @@ class WiFiScan
     uint32_t last_ui_update = 0;
     uint32_t last_sour_apple_update = 0;
     bool run_setup = true;
+    #ifdef MARAUDER_MINI_V3
+      bool ssid_group_scan_pending = false;
+      static constexpr uint8_t SSID_FINDER_SAMPLE_WINDOW = 5;
+      struct SSIDFinderAP {
+        int16_t ap_index = -1;
+        uint8_t bssid[6] = {};
+        uint8_t channel = 1;
+        int16_t filtered_rssi_q4 = -512;
+        int8_t raw_rssi = -128;
+        int8_t samples[SSID_FINDER_SAMPLE_WINDOW] = {};
+        uint8_t sample_count = 0;
+        uint8_t sample_cursor = 0;
+        uint32_t last_seen_ms = 0;
+        bool found = false;
+      };
+
+      String ssid_finder_name = "";
+      std::vector<SSIDFinderAP> ssid_finder_aps;
+      std::vector<uint8_t> ssid_finder_channels;
+      int16_t ssid_finder_active = -1;
+      int16_t ssid_finder_challenger = -1;
+      uint8_t ssid_finder_challenger_cycles = 0;
+      uint8_t ssid_finder_channel_cursor = 0;
+      bool ssid_finder_locked = false;
+      int8_t ssid_finder_trend = 0;
+      int8_t ssid_finder_trend_baseline = -128;
+      uint32_t ssid_finder_next_trend_ms = 0;
+      uint32_t ssid_finder_switch_notice_until = 0;
+      #ifdef HAS_SCREEN
+        TFT_eSprite* ssid_finder_sprite = nullptr;
+      #endif
+
+      void RunSSIDFinder(uint8_t scan_mode, uint16_t color);
+      void runSSIDFinder(uint32_t current_time);
+      void drawSSIDFinder(uint32_t current_time);
+      void recordSSIDFinderPacket(const uint8_t bssid[6], int8_t rssi,
+                                  uint32_t current_time);
+      void evaluateSSIDFinderTarget(uint32_t current_time,
+                                    bool require_hysteresis = true);
+      void resetSSIDFinder();
+      int8_t ssidFinderRssi(int16_t finder_index) const;
+      uint32_t ssidFinderFreshWindowMs() const;
+    #endif
     void initWiFi(uint8_t scan_mode);
     uint8_t bluetoothScanTime = 5;
     int packets_sent = 0;
@@ -1061,6 +1106,12 @@ class WiFiScan
     void main(uint32_t currentTime);
     void StartScan(uint8_t scan_mode, uint16_t color = 0);
     void StopScan(uint8_t scan_mode);
+    #ifdef MARAUDER_MINI_V3
+      void prepareSSIDGroupScan();
+      bool prepareSSIDFinder(const String& ssid_name);
+      void toggleSSIDFinderLock();
+      void markSSIDFinderFound();
+    #endif
     void setBaseMacAddress(uint8_t macAddr[6]);
 
     uint16_t poiCount = 0;
