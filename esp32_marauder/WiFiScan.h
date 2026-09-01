@@ -416,6 +416,8 @@ class WiFiScan
     uint32_t initTime = 0;
     uint32_t last_ui_update = 0;
     uint32_t last_sour_apple_update = 0;
+    uint16_t deauth_sequence = 0;
+    uint32_t deauth_tx_failed = 0;
     bool run_setup = true;
     #ifdef MARAUDER_MINI_V3
       WiFiCameraDetector::DeauthTarget camera_deauth_targets{};
@@ -794,6 +796,9 @@ class WiFiScan
     void sendBadMsgAttack(uint32_t currentTime, bool all = false);
     void sendAssocSleepAttack(uint32_t currentTime, bool all = false);
     void sendDeauthFrame(uint8_t bssid[6], int channel, uint8_t mac[6]);
+    esp_err_t transmitDeauthFrame(const uint8_t destination[6],
+                                  const uint8_t source[6],
+                                  const uint8_t bssid[6]);
     #ifdef MARAUDER_MINI_V3
       void sendCameraDeauthFrame(WiFiCameraDetector::DeauthLink& link);
       void drawCameraDeauthStatus();

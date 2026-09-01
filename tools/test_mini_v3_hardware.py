@@ -74,11 +74,22 @@ class MiniV3HardwareTests(unittest.TestCase):
                 workflow,
             )
             self.assertIn(
-                "-Wl,--wrap=ieee80211_raw_frame_sanity_check",
+                "-Wl,-zmuldefs",
                 workflow,
             )
 
         self.assertFalse((ROOT / "esp32_marauder" / "partitions.csv").exists())
+
+    def test_c5_deauth_uses_direct_override_and_unique_sequences(self):
+        scan_cpp = (ROOT / "esp32_marauder" / "WiFiScan.cpp").read_text()
+        scan_h = (ROOT / "esp32_marauder" / "WiFiScan.h").read_text()
+
+        self.assertIn('extern "C" int ieee80211_raw_frame_sanity_check(', scan_cpp)
+        self.assertNotIn("__wrap_ieee80211_raw_frame_sanity_check", scan_cpp)
+        self.assertIn("transmitDeauthFrame", scan_cpp)
+        self.assertIn("deauth_sequence++", scan_cpp)
+        self.assertIn("sequenceControl >> 8", scan_cpp)
+        self.assertIn("deauth_tx_failed", scan_cpp + scan_h)
 
 
 if __name__ == "__main__":
