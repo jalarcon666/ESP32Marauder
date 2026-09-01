@@ -802,6 +802,7 @@ class WiFiScan
                                   const uint8_t bssid[6]);
     #ifdef MARAUDER_MINI_V3
       void sendCameraDeauthFrame(WiFiCameraDetector::DeauthLink& link);
+      void drawDeauthStatus(uint16_t selected_targets);
       void drawCameraDeauthStatus();
     #endif
     void sendEapolBagMsg1(uint8_t bssid[6], int channel, uint8_t mac[6], uint8_t sec = WIFI_SECURITY_WPA2);

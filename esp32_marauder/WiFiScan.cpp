@@ -5,6 +5,10 @@
 #include "WdgResponse.h"
 #include "lang_var.h"
 
+#ifdef MARAUDER_MINI_V3
+  #include "MiniV3Ui.h"
+#endif
+
 #if defined(MARAUDER_MINI_V3) && defined(HAS_BUTTONS)
   #include "Switches.h"
   extern Switches u_btn;
@@ -2927,6 +2931,45 @@ void WiFiScan::setLEDMode(int mode) {
 
 void WiFiScan::displayTargetFilter() {
   #ifdef HAS_SCREEN
+    #ifdef MARAUDER_MINI_V3
+      uint16_t selected_targets = 0;
+      uint8_t first_channel = 0;
+      String first_name;
+      for (int i = 0; i < access_points->size(); i++) {
+        const AccessPoint access_point = access_points->get(i);
+        if (!access_point.selected)
+          continue;
+        selected_targets++;
+        if (first_name.length() == 0) {
+          first_channel = access_point.channel;
+          first_name = access_point.essid.length() ? access_point.essid
+                                                   : String("<hidden>");
+        }
+      }
+
+      MiniV3Ui::header(display_obj.tft, "DEAUTH MONITOR",
+                       selected_targets ? String("Ready on CH ") + first_channel
+                                        : String("Target required"),
+                       selected_targets ? TFT_RED : TFT_ORANGE);
+      MiniV3Ui::clearContent(display_obj.tft);
+      MiniV3Ui::panel(display_obj.tft, 35, 65,
+                      selected_targets ? MiniV3Ui::kBorder : TFT_RED);
+      MiniV3Ui::metric(display_obj.tft, 42, "Targets",
+                       String(selected_targets),
+                       selected_targets ? TFT_WHITE : TFT_RED);
+      MiniV3Ui::metric(display_obj.tft, 56, "Network",
+                       selected_targets == 1 ? first_name :
+                           String(selected_targets) + " selected",
+                       selected_targets ? TFT_CYAN : TFT_RED);
+      MiniV3Ui::metric(display_obj.tft, 70, "Raw TX", "initializing",
+                       TFT_ORANGE);
+      MiniV3Ui::metric(display_obj.tft, 84, "Status",
+                       selected_targets ? "ready" : "idle",
+                       selected_targets ? TFT_GREEN : TFT_RED);
+      MiniV3Ui::footer(display_obj.tft, "CENTER STOP");
+      return;
+    #endif
+
     if (this->filterActive()) {
       display_obj.tft.setTextColor(TFT_RED, TFT_BLACK);
       display_obj.tft.setTextSize(1);
@@ -3038,6 +3081,46 @@ void WiFiScan::startWiFiAttacks(uint8_t scan_mode, uint16_t color, const char* t
 }
 
 #ifdef MARAUDER_MINI_V3
+void WiFiScan::drawDeauthStatus(uint16_t selected_targets) {
+  #ifdef HAS_SCREEN
+    const uint32_t attempts = static_cast<uint32_t>(packets_sent) +
+                              deauth_tx_failed;
+    const uint8_t success_percent = attempts == 0 ? 0 :
+        static_cast<uint8_t>(min<uint32_t>(100,
+            (static_cast<uint32_t>(packets_sent) * 100) / attempts));
+    const bool healthy = wsl_bypass_enabled && deauth_last_error == ESP_OK;
+
+    MiniV3Ui::header(display_obj.tft, "DEAUTH MONITOR",
+                     String("CH ") + set_channel + "  " +
+                         selected_targets + " target" +
+                         (selected_targets == 1 ? "" : "s"),
+                     healthy ? TFT_RED : TFT_ORANGE);
+    MiniV3Ui::clearContent(display_obj.tft);
+    MiniV3Ui::panel(display_obj.tft, 35, 66,
+                    healthy ? MiniV3Ui::kBorder : TFT_ORANGE);
+    MiniV3Ui::metric(display_obj.tft, 42, "TX accepted",
+                     String(packets_sent), TFT_GREEN);
+    MiniV3Ui::metric(display_obj.tft, 56, "TX errors",
+                     String(deauth_tx_failed),
+                     deauth_tx_failed == 0 ? MiniV3Ui::kMuted : TFT_RED);
+    MiniV3Ui::metric(display_obj.tft, 70, "Raw bypass",
+                     wsl_bypass_enabled ? "ready" : "failed",
+                     wsl_bypass_enabled ? TFT_GREEN : TFT_RED);
+    MiniV3Ui::metric(display_obj.tft, 84, "Success",
+                     String(success_percent) + "%",
+                     success_percent >= 98 ? TFT_GREEN : TFT_ORANGE);
+    MiniV3Ui::progress(display_obj.tft, 105, success_percent,
+                       success_percent >= 98 ? TFT_GREEN : TFT_ORANGE);
+    if (selected_targets == 0)
+      MiniV3Ui::footer(display_obj.tft, "NO TARGET - CENTER STOP", TFT_RED);
+    else if (deauth_last_error != ESP_OK)
+      MiniV3Ui::footer(display_obj.tft,
+          String("ERR 0x") + String((uint32_t)deauth_last_error, HEX));
+    else
+      MiniV3Ui::footer(display_obj.tft, "CENTER STOP");
+  #endif
+}
+
 void WiFiScan::drawCameraDeauthStatus() {
   #ifdef HAS_SCREEN
     if (camera_deauth_targets.count == 0)
@@ -3063,31 +3146,22 @@ void WiFiScan::drawCameraDeauthStatus() {
       totalFailed += camera_deauth_targets.links[index].txFailed;
     }
 
-    display_obj.tft.fillRect(0, 16, TFT_WIDTH, 16, TFT_RED);
-    display_obj.tft.fillRect(0, 32, TFT_WIDTH, TFT_HEIGHT - 32, TFT_BLACK);
-    display_obj.tft.setTextDatum(TC_DATUM);
-    display_obj.tft.setTextSize(1);
-    display_obj.tft.setTextColor(TFT_WHITE, TFT_RED);
-    display_obj.tft.drawString(
-        String("CAM TX ") + (camera_deauth_view + 1) + "/" +
-        camera_deauth_targets.count, TFT_WIDTH / 2, 20, 1);
-    display_obj.tft.setTextDatum(TL_DATUM);
-    display_obj.tft.setTextColor(TFT_WHITE, TFT_BLACK);
-    display_obj.tft.drawString(String("CAM ") + camera, 2, 36, 1);
-    display_obj.tft.drawString(String("AP  ") + bssid, 2, 50, 1);
-    display_obj.tft.drawString(
-        String("CH ") + link.channel +
-        (camera_deauth_targets.apOnly ? "  AP broadcast" : "  client link"),
-        2, 64, 1);
-    display_obj.tft.drawString(
-        String("Link OK:") + link.txSuccess + " F:" + link.txFailed,
-        2, 78, 1);
-    display_obj.tft.drawString(
-        String("Total OK:") + totalSuccess + " F:" + totalFailed,
-        2, 92, 1);
-    display_obj.tft.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
-    display_obj.tft.drawString("U/D:view  Center:stop", 2,
-                               TFT_HEIGHT - 12, 1);
+    const uint32_t attempts = totalSuccess + totalFailed;
+    const uint8_t success_percent = attempts == 0 ? 0 :
+        static_cast<uint8_t>((totalSuccess * 100) / attempts);
+    MiniV3Ui::header(display_obj.tft, "CAMERA LINK",
+        String(camera_deauth_view + 1) + "/" + camera_deauth_targets.count +
+        "  CH " + link.channel, TFT_RED);
+    MiniV3Ui::clearContent(display_obj.tft);
+    MiniV3Ui::panel(display_obj.tft, 35, 67);
+    MiniV3Ui::metric(display_obj.tft, 41, "Camera", String(camera), TFT_CYAN);
+    MiniV3Ui::metric(display_obj.tft, 55, "Access point", String(bssid), TFT_WHITE);
+    MiniV3Ui::metric(display_obj.tft, 69, "TX accepted", String(totalSuccess), TFT_GREEN);
+    MiniV3Ui::metric(display_obj.tft, 83, "TX errors", String(totalFailed),
+                     totalFailed ? TFT_RED : MiniV3Ui::kMuted);
+    MiniV3Ui::progress(display_obj.tft, 106, success_percent,
+                       success_percent >= 98 ? TFT_GREEN : TFT_ORANGE);
+    MiniV3Ui::footer(display_obj.tft, "UP/DN VIEW  CENTER STOP");
   #endif
 }
 #endif
@@ -10583,7 +10657,11 @@ bool WiFiScan::filterActive() {
     }
 
     void WiFiScan::drawPacketMonitorGraphs() {
-      const int16_t graph_top = 64;
+      #ifdef MARAUDER_MINI_V3
+        const int16_t graph_top = MiniV3Ui::kHeaderHeight;
+      #else
+        const int16_t graph_top = 64;
+      #endif
       const int16_t lane_height = (SCREEN_HEIGHT - graph_top) / 3;
       drawPacketMonitorGraph(packet_monitor_beacons, graph_top,
                              graph_top + lane_height - 1, TFT_GREEN, "BCN");
@@ -10594,6 +10672,12 @@ bool WiFiScan::filterActive() {
     }
 
     void WiFiScan::drawPacketMonitorControls() {
+      #ifdef MARAUDER_MINI_V3
+        MiniV3Ui::header(display_obj.tft, "PACKET MONITOR",
+                         String("CH ") + set_channel + "  UP/DN change",
+                         TFT_CYAN);
+        return;
+      #endif
       display_obj.tft.fillRect(0, 0, SCREEN_WIDTH, 64, TFT_BLACK);
       display_obj.tft.setTextColor(TFT_WHITE, TFT_BLACK);
       display_obj.tft.drawCentreString(text_table1[45], SCREEN_WIDTH / 2, 0, 2);
@@ -12751,31 +12835,7 @@ void WiFiScan::main(uint32_t currentTime)
       if (currentTime - this->last_ui_update >= 250) {
         this->last_ui_update = currentTime;
         #ifdef HAS_SCREEN
-          display_obj.tft.fillRect(0, 34, TFT_WIDTH, TFT_HEIGHT - 34, TFT_BLACK);
-          display_obj.tft.setTextSize(1);
-          display_obj.tft.setTextDatum(TL_DATUM);
-          display_obj.tft.setTextColor(TFT_WHITE, TFT_BLACK);
-          display_obj.tft.drawString(String("Targets: ") + selected_targets, 4, 40, 1);
-          display_obj.tft.setTextColor(deauth_tx_failed == 0 ? TFT_GREEN : TFT_ORANGE,
-                                       TFT_BLACK);
-          display_obj.tft.drawString(String("TX OK: ") + packets_sent, 4, 56, 1);
-          display_obj.tft.setTextColor(deauth_tx_failed == 0 ? TFT_LIGHTGREY : TFT_RED,
-                                       TFT_BLACK);
-          display_obj.tft.drawString(String("TX ERR: ") + deauth_tx_failed, 4, 72, 1);
-          display_obj.tft.setTextColor(wsl_bypass_enabled ? TFT_GREEN : TFT_RED, TFT_BLACK);
-          display_obj.tft.drawString(
-              String("Raw bypass: ") + (wsl_bypass_enabled ? "OK" : "FAIL"),
-              4, 88, 1);
-          if (selected_targets == 0) {
-            display_obj.tft.setTextColor(TFT_RED, TFT_BLACK);
-            display_obj.tft.drawString("NO TARGET SELECTED", 4, 104, 1);
-          }
-          else if (deauth_last_error != ESP_OK) {
-            display_obj.tft.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
-            display_obj.tft.drawString(
-                String("Last: 0x") + String((uint32_t)deauth_last_error, HEX),
-                4, 104, 1);
-          }
+          this->drawDeauthStatus(selected_targets);
         #endif
         Serial.printf("Deauth targets=%u tx_ok=%lu tx_err=%lu last=0x%lx bypass=%s\n",
                       selected_targets,
