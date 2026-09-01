@@ -19,6 +19,9 @@ https://www.online-utility.org/image/convert/to/XBM
 #endif
 
 #include "Assets.h"
+#ifdef MARAUDER_MINI_V3
+  #include "SplashScreen.h"
+#endif
 #include "WiFiScan.h"
 #ifdef HAS_SD
   #include "SDInterface.h"
@@ -111,6 +114,34 @@ CommandLine cli_obj;
 #endif
 
 const String PROGMEM version_number = MARAUDER_VERSION;
+
+#if defined(HAS_SCREEN) && defined(MARAUDER_MINI_V3)
+static void drawSplashText(const String& text, int16_t center_x, int16_t y,
+                           uint16_t color, uint8_t font = 1) {
+  display_obj.tft.setTextColor(TFT_BLACK);
+  display_obj.tft.drawCentreString(text, center_x + 1, y + 1, font);
+  display_obj.tft.setTextColor(color);
+  display_obj.tft.drawCentreString(text, center_x, y, font);
+}
+
+static void drawMarauderEternalSplash() {
+  display_obj.tft.fillScreen(TFT_BLACK);
+  display_obj.tft.setTextWrap(false);
+  display_obj.tft.setTextSize(1);
+  display_obj.tft.setFreeFont(NULL);
+  display_obj.tft.setSwapBytes(true);
+  display_obj.tft.pushImage(0, 0, MARAUDER_ETERNAL_SPLASH_WIDTH,
+                            MARAUDER_ETERNAL_SPLASH_HEIGHT,
+                            marauder_eternal_splash);
+  display_obj.tft.setSwapBytes(false);
+  drawSplashText("ESP32 MARAUDER", TFT_WIDTH / 2, 1, TFT_WHITE);
+  drawSplashText("ETERNAL", TFT_WIDTH / 2, 11, 0x733F);
+  drawSplashText("Version " MARAUDER_VERSION, TFT_WIDTH / 2, 95, TFT_WHITE);
+  drawSplashText("JustCallMeKoKo/", TFT_WIDTH / 2, 106, TFT_LIGHTGREY);
+  drawSplashText("n0vajay05", TFT_WIDTH / 2, 116, TFT_LIGHTGREY);
+  display_obj.tft.setTextColor(TFT_WHITE, TFT_BLACK);
+}
+#endif
 
 #ifdef HAS_NEOPIXEL_LED
   Adafruit_NeoPixel strip = Adafruit_NeoPixel(Pixels, PIN, NEO_GRB + NEO_KHZ800);
@@ -340,7 +371,9 @@ void setup()
   #endif
 
   #ifdef HAS_SCREEN
-    #if !defined(MARAUDER_CARDPUTER) && !defined(MARAUDER_CARDPUTER_ADV)
+    #ifdef MARAUDER_MINI_V3
+      drawMarauderEternalSplash();
+    #elif !defined(MARAUDER_CARDPUTER) && !defined(MARAUDER_CARDPUTER_ADV)
       display_obj.tft.drawCentreString("ESP32 Marauder", TFT_WIDTH/2, TFT_HEIGHT * 0.33, 1);
       display_obj.tft.drawCentreString("JustCallMeKoko", TFT_WIDTH/2, TFT_HEIGHT * 0.5, 1);
       display_obj.tft.drawCentreString(display_obj.version_number, TFT_WIDTH/2, TFT_HEIGHT * 0.66, 1);

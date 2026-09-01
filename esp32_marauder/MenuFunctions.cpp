@@ -15,11 +15,232 @@ extern LinkedList<Flipper>* flippers;
 extern LinkedList<BleDevice>* ble_devices;
 
 #ifdef HAS_MINI_SCREEN
-void MenuFunctions::drawMiniMenuButton(int b, int x, bool selected) {
+namespace {
+constexpr uint16_t MINI_MARQUEE_STEP_MS = 40;
+constexpr uint16_t MINI_MARQUEE_PAUSE_MS = 900;
+
+#ifdef MARAUDER_MINI_V3
+constexpr uint16_t MINI_MENU_REPEAT_DELAY_MS = 450;
+constexpr uint16_t MINI_MENU_REPEAT_INTERVAL_MS = 120;
+constexpr uint16_t MINI_UI_SURFACE = 0x18E3;
+constexpr uint16_t MINI_UI_BORDER = 0x31A6;
+constexpr uint16_t MINI_UI_ACCENT = 0x733F;
+constexpr uint16_t MINI_UI_SELECTED = 0x03E0;
+constexpr uint16_t MINI_UI_TEXT = TFT_WHITE;
+constexpr uint16_t MINI_UI_MUTED = 0xA514;
+constexpr uint16_t MINI_UI_DANGER = TFT_RED;
+
+bool miniMenuButtonDown(Switches& button) {
+  const bool level = digitalRead(button.getPin());
+  return button.getPullup() ? level == LOW : level == HIGH;
+}
+
+void drawMiniBackGlyph(int16_t x, int16_t y, uint16_t color) {
+  display_obj.tft.drawLine(x + 4, y, x, y + 4, color);
+  display_obj.tft.drawLine(x, y + 4, x + 4, y + 8, color);
+  display_obj.tft.drawFastHLine(x, y + 4, 7, color);
+}
+
+void drawMiniChevron(int16_t x, int16_t y, uint16_t color) {
+  display_obj.tft.drawLine(x, y, x + 3, y + 3, color);
+  display_obj.tft.drawLine(x + 3, y + 3, x, y + 6, color);
+}
+
+void drawMiniSymbol(uint8_t icon, int16_t cx, int16_t cy, uint16_t color) {
+  switch (icon) {
+    case WIFI:
+      display_obj.tft.drawLine(cx - 6, cy - 3, cx, cy - 7, color);
+      display_obj.tft.drawLine(cx, cy - 7, cx + 6, cy - 3, color);
+      display_obj.tft.drawLine(cx - 4, cy, cx, cy - 3, color);
+      display_obj.tft.drawLine(cx, cy - 3, cx + 4, cy, color);
+      display_obj.tft.fillCircle(cx, cy + 3, 1, color);
+      break;
+    case BLUETOOTH:
+    case BLUETOOTH_SNIFF:
+      display_obj.tft.drawFastVLine(cx, cy - 7, 15, color);
+      display_obj.tft.drawLine(cx, cy - 7, cx + 5, cy - 2, color);
+      display_obj.tft.drawLine(cx + 5, cy - 2, cx - 4, cy + 5, color);
+      display_obj.tft.drawLine(cx, cy + 7, cx + 5, cy + 2, color);
+      display_obj.tft.drawLine(cx + 5, cy + 2, cx - 4, cy - 5, color);
+      break;
+    case GPS_MENU:
+      display_obj.tft.drawCircle(cx, cy - 2, 5, color);
+      display_obj.tft.fillCircle(cx, cy - 2, 1, color);
+      display_obj.tft.drawLine(cx - 3, cy + 2, cx, cy + 7, color);
+      display_obj.tft.drawLine(cx + 3, cy + 2, cx, cy + 7, color);
+      break;
+    case GENERAL_APPS:
+      display_obj.tft.drawRoundRect(cx - 7, cy - 4, 15, 9, 3, color);
+      display_obj.tft.drawFastHLine(cx - 5, cy, 5, color);
+      display_obj.tft.drawFastVLine(cx - 3, cy - 2, 5, color);
+      display_obj.tft.fillCircle(cx + 4, cy - 1, 1, color);
+      display_obj.tft.fillCircle(cx + 6, cy + 2, 1, color);
+      break;
+    case DEVICE:
+    case DEVICE_INFO:
+      display_obj.tft.drawRect(cx - 5, cy - 5, 11, 11, color);
+      display_obj.tft.drawRect(cx - 2, cy - 2, 5, 5, color);
+      for (int8_t p = -3; p <= 3; p += 3) {
+        display_obj.tft.drawFastVLine(cx + p, cy - 7, 2, color);
+        display_obj.tft.drawFastVLine(cx + p, cy + 6, 2, color);
+        display_obj.tft.drawFastHLine(cx - 7, cy + p, 2, color);
+        display_obj.tft.drawFastHLine(cx + 6, cy + p, 2, color);
+      }
+      break;
+    case REBOOT:
+      display_obj.tft.drawCircle(cx, cy, 6, color);
+      display_obj.tft.drawFastVLine(cx, cy - 8, 7, color);
+      break;
+    case SNIFFERS:
+    case BEACON_SNIFF:
+    case DEAUTH_SNIFF:
+    case PROBE_SNIFF:
+      display_obj.tft.drawFastVLine(cx, cy - 1, 8, color);
+      display_obj.tft.fillCircle(cx, cy - 3, 1, color);
+      display_obj.tft.drawLine(cx - 3, cy - 5, cx - 5, cy - 2, color);
+      display_obj.tft.drawLine(cx + 3, cy - 5, cx + 5, cy - 2, color);
+      display_obj.tft.drawLine(cx - 5, cy + 7, cx + 5, cy + 7, color);
+      break;
+    case SCANNERS:
+      display_obj.tft.drawCircle(cx - 2, cy - 2, 5, color);
+      display_obj.tft.drawLine(cx + 2, cy + 2, cx + 7, cy + 7, color);
+      break;
+    case ATTACKS:
+      display_obj.tft.drawLine(cx + 1, cy - 8, cx - 5, cy + 1, color);
+      display_obj.tft.drawLine(cx - 5, cy + 1, cx, cy + 1, color);
+      display_obj.tft.drawLine(cx, cy + 1, cx - 1, cy + 8, color);
+      display_obj.tft.drawLine(cx - 1, cy + 8, cx + 6, cy - 2, color);
+      display_obj.tft.drawLine(cx + 6, cy - 2, cx + 1, cy - 2, color);
+      display_obj.tft.drawLine(cx + 1, cy - 2, cx + 1, cy - 8, color);
+      break;
+    case SETTINGS:
+    case BRIGHTNESS:
+      display_obj.tft.drawCircle(cx, cy, 5, color);
+      display_obj.tft.fillCircle(cx, cy, 1, color);
+      display_obj.tft.drawFastVLine(cx, cy - 8, 3, color);
+      display_obj.tft.drawFastVLine(cx, cy + 6, 3, color);
+      display_obj.tft.drawFastHLine(cx - 8, cy, 3, color);
+      display_obj.tft.drawFastHLine(cx + 6, cy, 3, color);
+      break;
+    default:
+      display_obj.tft.drawCircle(cx, cy, 5, color);
+      display_obj.tft.fillCircle(cx, cy, 1, color);
+      break;
+  }
+}
+
+void drawMiniTileLabel(const String& label, int16_t x, int16_t y, int16_t width,
+                       uint16_t foreground, uint16_t background, uint16_t text_offset) {
+  const int16_t text_width = display_obj.tft.textWidth(label);
+  const int16_t viewport_width = max((int16_t)1, (int16_t)(width - 4));
+  const int16_t cursor_x = text_width > viewport_width
+                               ? -static_cast<int16_t>(text_offset)
+                               : max((int16_t)0, (int16_t)((viewport_width - text_width) / 2));
+  display_obj.tft.setTextColor(foreground, background);
+  display_obj.tft.setViewport(x + 2, y, viewport_width, 9);
+  display_obj.tft.setCursor(cursor_x, 0);
+  display_obj.tft.print(label);
+  display_obj.tft.resetViewport();
+}
+#endif
+}
+
+void MenuFunctions::drawMiniMenuButton(int b, int x, bool selected, uint16_t text_offset) {
   if (!current_menu || !current_menu->list || x < 0 || x >= current_menu->list->size())
     return;
 
   MenuNode mini_node = current_menu->list->get(x);
+
+  #ifdef MARAUDER_MINI_V3
+  (void)selected;
+  String label = mini_node.name;
+  label.trim();
+  const bool is_setting_node = mini_node.icon == SETTINGS && mini_node.color == TFTLIGHTGREY;
+  const bool cursor_highlighted = current_menu->selected == x;
+  const bool item_selected = mini_node.selected && !is_setting_node;
+  const bool emphasized = cursor_highlighted || item_selected;
+  const uint16_t background = item_selected ? MINI_UI_SELECTED
+      : (cursor_highlighted ? MINI_UI_ACCENT : MINI_UI_SURFACE);
+  const uint16_t border = cursor_highlighted ? MINI_UI_ACCENT
+      : (item_selected ? MINI_UI_SELECTED : MINI_UI_BORDER);
+  const uint16_t icon_color = emphasized ? MINI_UI_TEXT : MINI_UI_MUTED;
+
+  display_obj.tft.setFreeFont(NULL);
+  display_obj.tft.setTextSize(1);
+  display_obj.tft.setTextWrap(false);
+
+  if (current_menu == &mainMenu) {
+    const int16_t card_x = 3 + ((x % 2) * 63);
+    const int16_t card_y = 21 + ((x / 2) * 35);
+    display_obj.tft.fillRoundRect(card_x, card_y, 59, 32, 5, background);
+    display_obj.tft.drawRoundRect(card_x, card_y, 59, 32, 5, border);
+    drawMiniSymbol(mini_node.icon, card_x + 29, card_y + 10,
+                   (!emphasized && mini_node.icon == REBOOT) ? MINI_UI_DANGER : icon_color);
+    drawMiniTileLabel(label, card_x, card_y + 22, 59, MINI_UI_TEXT, background, text_offset);
+    return;
+  }
+
+  const bool wifi_category = current_menu == &wifiMenu;
+  const bool bluetooth_category = current_menu == &bluetoothMenu;
+  if ((wifi_category || bluetooth_category) && x == 0) {
+    display_obj.tft.fillRoundRect(2, 9, 17, 10, 4, background);
+    drawMiniBackGlyph(7, 10, emphasized ? MINI_UI_TEXT : MINI_UI_MUTED);
+    return;
+  }
+
+  if (wifi_category) {
+    const int16_t tile = x - 1;
+    const int16_t card_x = 3 + ((tile % 2) * 63);
+    const int16_t card_y = 22 + ((tile / 2) * 51);
+    display_obj.tft.fillRoundRect(card_x, card_y, 59, 47, 6, background);
+    display_obj.tft.drawRoundRect(card_x, card_y, 59, 47, 6, border);
+    drawMiniSymbol(x == 4 ? SETTINGS : mini_node.icon, card_x + 29, card_y + 17, icon_color);
+    drawMiniTileLabel(label, card_x, card_y + 34, 59, MINI_UI_TEXT, background, text_offset);
+    return;
+  }
+
+  if (bluetooth_category) {
+    const int16_t card_y = 23 + ((x - 1) * 33);
+    display_obj.tft.fillRoundRect(4, card_y, 120, 29, 6, background);
+    display_obj.tft.drawRoundRect(4, card_y, 120, 29, 6, border);
+    drawMiniSymbol(mini_node.icon, 16, card_y + 14, icon_color);
+    display_obj.tft.setTextColor(MINI_UI_TEXT, background);
+    display_obj.tft.setViewport(28, card_y + 10, 80, 9);
+    display_obj.tft.setCursor(-static_cast<int16_t>(text_offset), 0);
+    display_obj.tft.print(label);
+    display_obj.tft.resetViewport();
+    drawMiniChevron(113, card_y + 11, icon_color);
+    return;
+  }
+
+  const int16_t row_y = 22 + (b * 17);
+  String lower_label = label;
+  lower_label.toLowerCase();
+  const bool danger = mini_node.icon == REBOOT || lower_label.indexOf("delete") >= 0 ||
+                      lower_label.indexOf("erase") >= 0 || lower_label.indexOf("clear") >= 0;
+  const uint16_t detail_color = emphasized ? MINI_UI_TEXT : (danger ? MINI_UI_DANGER : MINI_UI_MUTED);
+  display_obj.tft.fillRoundRect(4, row_y, 120, 15, 4, background);
+  display_obj.tft.drawRoundRect(4, row_y, 120, 15, 4, border);
+  if (x == 0 && current_menu->parentMenu != NULL)
+    drawMiniBackGlyph(11, row_y + 3, detail_color);
+  else
+    drawMiniSymbol(mini_node.icon, 13, row_y + 7, detail_color);
+
+  const int16_t text_end = is_setting_node ? 95 : 112;
+  display_obj.tft.setTextColor(MINI_UI_TEXT, background);
+  display_obj.tft.setViewport(23, row_y, max((int16_t)1, (int16_t)(text_end - 23)), 15);
+  display_obj.tft.setCursor(-static_cast<int16_t>(text_offset), 4);
+  display_obj.tft.print(label);
+  display_obj.tft.resetViewport();
+  if (is_setting_node) {
+    const uint16_t toggle_color = mini_node.selected ? MINI_UI_SELECTED : MINI_UI_BORDER;
+    display_obj.tft.fillRoundRect(98, row_y + 3, 22, 9, 5, toggle_color);
+    display_obj.tft.fillCircle(98 + (mini_node.selected ? 17 : 5), row_y + 7, 3, MINI_UI_TEXT);
+  } else {
+    drawMiniChevron(115, row_y + 4, detail_color);
+  }
+  return;
+  #else
   bool is_setting_node = (mini_node.icon == SETTINGS && mini_node.color == TFTLIGHTGREY);
   uint16_t color = is_setting_node ? (mini_node.selected ? TFT_GREEN : TFT_RED) : this->getColor(mini_node.color);
   int16_t button_x = KEY_X - (KEY_W / 2);
@@ -33,9 +254,184 @@ void MenuFunctions::drawMiniMenuButton(int b, int x, bool selected) {
   display_obj.tft.setTextWrap(false);
   display_obj.tft.fillRect(button_x, button_y - 4, KEY_W, KEY_H, background);
   display_obj.tft.setTextColor(text_color, background);
-  display_obj.tft.setCursor(button_x + BUTTON_PADDING, button_y + (KEY_H / 2) - 8);
-  display_obj.tft.print(current_menu->list->get(x).name);
+  display_obj.tft.setViewport(button_x + BUTTON_PADDING, button_y - 4,
+                              max(1, KEY_W - (BUTTON_PADDING * 2)), KEY_H);
+  display_obj.tft.setCursor(-static_cast<int16_t>(text_offset), (KEY_H / 2) - 4);
+  display_obj.tft.print(mini_node.name);
+  display_obj.tft.resetViewport();
+  #endif
 }
+
+void MenuFunctions::resetMiniMenuMarquee(uint32_t current_time) {
+  if (current_time == 0)
+    current_time = millis();
+  mini_marquee_menu = current_menu;
+  mini_marquee_index = current_menu ? current_menu->selected : -1;
+  mini_marquee_offset = 0;
+  mini_marquee_direction = 1;
+  mini_marquee_next_step = current_time + MINI_MARQUEE_PAUSE_MS;
+}
+
+void MenuFunctions::updateMiniMenuMarquee(uint32_t current_time) {
+  if (!current_menu || !current_menu->list || current_menu->list->size() == 0)
+    return;
+  const int selected_index = current_menu->selected;
+  if (selected_index < 0 || selected_index >= current_menu->list->size())
+    return;
+  if (mini_marquee_menu != current_menu || mini_marquee_index != selected_index) {
+    resetMiniMenuMarquee(current_time);
+    return;
+  }
+  const int visible_row = selected_index - menu_start_index;
+  if (visible_row < 0 || visible_row >= BUTTON_SCREEN_LIMIT)
+    return;
+
+  display_obj.tft.setFreeFont(NULL);
+  display_obj.tft.setTextSize(1);
+  int16_t available_width = max(1, KEY_W - (BUTTON_PADDING * 2));
+  #ifdef MARAUDER_MINI_V3
+    const MenuNode selected_node = current_menu->list->get(selected_index);
+    if (current_menu == &mainMenu)
+      available_width = 55;
+    else if (current_menu == &wifiMenu) {
+      if (selected_index == 0) return;
+      available_width = 55;
+    }
+    else if (current_menu == &bluetoothMenu) {
+      if (selected_index == 0) return;
+      available_width = 80;
+    }
+    else
+      available_width = selected_node.icon == SETTINGS && selected_node.color == TFTLIGHTGREY ? 72 : 89;
+  #endif
+  const int16_t label_width = display_obj.tft.textWidth(current_menu->list->get(selected_index).name);
+  if (label_width <= available_width || static_cast<int32_t>(current_time - mini_marquee_next_step) < 0)
+    return;
+
+  const uint16_t maximum_offset = label_width - available_width;
+  if (mini_marquee_direction > 0) {
+    if (mini_marquee_offset < maximum_offset) mini_marquee_offset++;
+    if (mini_marquee_offset >= maximum_offset) {
+      mini_marquee_offset = maximum_offset;
+      mini_marquee_direction = -1;
+      mini_marquee_next_step = current_time + MINI_MARQUEE_PAUSE_MS;
+    } else {
+      mini_marquee_next_step = current_time + MINI_MARQUEE_STEP_MS;
+    }
+  } else {
+    if (mini_marquee_offset > 0) mini_marquee_offset--;
+    if (mini_marquee_offset == 0) {
+      mini_marquee_direction = 1;
+      mini_marquee_next_step = current_time + MINI_MARQUEE_PAUSE_MS;
+    } else {
+      mini_marquee_next_step = current_time + MINI_MARQUEE_STEP_MS;
+    }
+  }
+  drawMiniMenuButton(visible_row, selected_index, true, mini_marquee_offset);
+}
+
+#ifdef MARAUDER_MINI_V3
+void MenuFunctions::selectMiniMenuIndex(int target_index) {
+  if (!current_menu || !current_menu->list || current_menu->list->size() == 0)
+    return;
+  target_index = constrain(target_index, 0, current_menu->list->size() - 1);
+  const int previous_index = current_menu->selected;
+  if (target_index == previous_index)
+    return;
+  current_menu->selected = target_index;
+  resetMiniMenuMarquee();
+  if (target_index < menu_start_index || target_index >= menu_start_index + BUTTON_SCREEN_LIMIT) {
+    const int new_start = target_index < menu_start_index ? target_index : target_index + 1 - BUTTON_SCREEN_LIMIT;
+    buildButtons(current_menu, new_start);
+    displayCurrentMenu(new_start);
+    return;
+  }
+  buttonSelected(target_index - menu_start_index, target_index);
+  if (previous_index >= menu_start_index && previous_index < menu_start_index + BUTTON_SCREEN_LIMIT)
+    buttonNotSelected(previous_index - menu_start_index, previous_index);
+}
+
+void MenuFunctions::navigateMiniMenu(int8_t horizontal, int8_t vertical) {
+  if (!current_menu || !current_menu->list || current_menu->list->size() == 0)
+    return;
+  const int selected_index = current_menu->selected;
+  const int item_count = current_menu->list->size();
+  int target_index = selected_index;
+  if (current_menu == &mainMenu) {
+    if (horizontal != 0) {
+      const int row_start = (selected_index / 2) * 2;
+      const int candidate = selected_index + horizontal;
+      if (candidate >= row_start && candidate < row_start + 2 && candidate < item_count)
+        target_index = candidate;
+    } else if (vertical != 0) {
+      const int column = selected_index % 2;
+      const int row_count = (item_count + 1) / 2;
+      const int target_row = (selected_index / 2 + vertical + row_count) % row_count;
+      target_index = min(target_row * 2 + column, item_count - 1);
+    }
+  } else if (current_menu == &wifiMenu) {
+    if (selected_index == 0) {
+      if (vertical < 0) target_index = item_count - 1;
+      else if (vertical > 0 || horizontal > 0) target_index = 1;
+    } else {
+      const int tile = selected_index - 1;
+      const int column = tile % 2;
+      const int row = tile / 2;
+      if (horizontal < 0 && column == 1) target_index--;
+      else if (horizontal > 0 && column == 0 && selected_index + 1 < item_count) target_index++;
+      else if (vertical < 0) target_index = row == 0 ? 0 : selected_index - 2;
+      else if (vertical > 0) target_index = selected_index + 2 < item_count ? selected_index + 2 : 0;
+    }
+  } else if (vertical != 0) {
+    target_index = (selected_index + vertical + item_count) % item_count;
+  } else if (horizontal < 0) {
+    if (current_menu->parentMenu != NULL) current_menu->list->get(0).callable();
+    return;
+  } else if (horizontal > 0) {
+    current_menu->list->get(selected_index).callable();
+    return;
+  }
+  selectMiniMenuIndex(target_index);
+}
+
+void MenuFunctions::updateMiniMenuNavigationRepeat(uint32_t current_time) {
+  const bool menu_active = wifi_scan_obj.currentScanMode == WIFI_SCAN_OFF ||
+                           wifi_scan_obj.currentScanMode == WIFI_CONNECTED ||
+                           wifi_scan_obj.currentScanMode == OTA_UPDATE;
+  if (!menu_active || !current_menu || !current_menu->list || current_menu->list->size() == 0) {
+    mini_menu_repeat_direction = 0;
+    mini_menu_repeat_enabled = false;
+    return;
+  }
+  uint8_t direction = 0;
+  uint8_t pressed_count = 0;
+  if (miniMenuButtonDown(u_btn)) { direction = 1; pressed_count++; }
+  if (miniMenuButtonDown(d_btn)) { direction = 2; pressed_count++; }
+  if (miniMenuButtonDown(l_btn)) { direction = 3; pressed_count++; }
+  if (miniMenuButtonDown(r_btn)) { direction = 4; pressed_count++; }
+  if (pressed_count != 1) {
+    mini_menu_repeat_direction = 0;
+    mini_menu_repeat_enabled = false;
+    return;
+  }
+  if (direction != mini_menu_repeat_direction) {
+    mini_menu_repeat_direction = direction;
+    mini_menu_repeat_enabled = direction <= 2 || current_menu == &mainMenu || current_menu == &wifiMenu;
+    mini_menu_repeat_next_step = current_time + MINI_MENU_REPEAT_DELAY_MS;
+    return;
+  }
+  if (!mini_menu_repeat_enabled || static_cast<int32_t>(current_time - mini_menu_repeat_next_step) < 0)
+    return;
+  switch (direction) {
+    case 1: navigateMiniMenu(0, -1); break;
+    case 2: navigateMiniMenu(0, 1); break;
+    case 3: navigateMiniMenu(-1, 0); break;
+    case 4: navigateMiniMenu(1, 0); break;
+    default: break;
+  }
+  mini_menu_repeat_next_step = current_time + MINI_MENU_REPEAT_INTERVAL_MS;
+}
+#endif
 #endif
 
 void MenuFunctions::buttonNotSelected(int b, int x) {
@@ -150,6 +546,13 @@ void MenuFunctions::main(uint32_t currentTime)
 {
   #if defined(MARAUDER_CARDPUTER) || defined(MARAUDER_CARDPUTER_ADV)
     this->updateKeyboard();
+  #endif
+
+  #ifdef HAS_MINI_SCREEN
+    if ((wifi_scan_obj.currentScanMode == WIFI_SCAN_OFF) ||
+        (wifi_scan_obj.currentScanMode == WIFI_CONNECTED) ||
+        (wifi_scan_obj.currentScanMode == OTA_UPDATE))
+      this->updateMiniMenuMarquee(currentTime);
   #endif
 
   // Some function exited and we need to go back to normal
@@ -729,12 +1132,24 @@ void MenuFunctions::main(uint32_t currentTime)
     // Don't do this for touch screens
     #if !(defined(MARAUDER_V6) || defined(MARAUDER_V6_1) || defined(MARAUDER_CYD_MICRO) || defined(MARAUDER_CYD_GUITION) || defined(MARAUDER_CYD_2USB) || defined(MARAUDER_CYD_3_5_INCH))
       #if !defined(MARAUDER_M5STICKC) || defined(MARAUDER_M5STICKCP2)
+        #ifdef MARAUDER_MINI_V3
+          this->updateMiniMenuNavigationRepeat(currentTime);
+        #endif
+
         #if (U_BTN >= 0 || defined(MARAUDER_CARDPUTER) || defined(MARAUDER_CARDPUTER_ADV))
           #if (U_BTN >= 0)
             if (u_btn.justPressed()) {
           #elif defined(MARAUDER_CARDPUTER) || defined(MARAUDER_CARDPUTER_ADV)
             if (this->isKeyPressed(';')) {
           #endif
+              #ifdef MARAUDER_MINI_V3
+              if ((wifi_scan_obj.currentScanMode == WIFI_SCAN_OFF) ||
+                  (wifi_scan_obj.currentScanMode == WIFI_CONNECTED) ||
+                  (wifi_scan_obj.currentScanMode == OTA_UPDATE)) {
+                this->navigateMiniMenu(0, -1);
+              }
+              else
+              #endif
               if ((wifi_scan_obj.currentScanMode == WIFI_SCAN_OFF) ||
                   (wifi_scan_obj.currentScanMode == WIFI_CONNECTED) ||
                   (wifi_scan_obj.currentScanMode == OTA_UPDATE)) {
@@ -807,6 +1222,14 @@ void MenuFunctions::main(uint32_t currentTime)
       #elif defined(MARAUDER_CARDPUTER) || defined(MARAUDER_CARDPUTER_ADV)
       if (this->isKeyPressed('.')){
       #endif
+        #ifdef MARAUDER_MINI_V3
+        if ((wifi_scan_obj.currentScanMode == WIFI_SCAN_OFF) ||
+            (wifi_scan_obj.currentScanMode == WIFI_CONNECTED) ||
+            (wifi_scan_obj.currentScanMode == OTA_UPDATE)) {
+          this->navigateMiniMenu(0, 1);
+        }
+        else
+        #endif
         if ((wifi_scan_obj.currentScanMode == WIFI_SCAN_OFF) ||
             (wifi_scan_obj.currentScanMode == WIFI_CONNECTED) ||
             (wifi_scan_obj.currentScanMode == OTA_UPDATE)) {
@@ -883,6 +1306,14 @@ void MenuFunctions::main(uint32_t currentTime)
       #elif defined(MARAUDER_CARDPUTER) || defined(MARAUDER_CARDPUTER_ADV)
       if (this->isKeyPressed('/')) {
       #endif
+        #ifdef MARAUDER_MINI_V3
+        if ((wifi_scan_obj.currentScanMode == WIFI_SCAN_OFF) ||
+            (wifi_scan_obj.currentScanMode == WIFI_CONNECTED) ||
+            (wifi_scan_obj.currentScanMode == OTA_UPDATE)) {
+          this->navigateMiniMenu(1, 0);
+        }
+        else
+        #endif
         if (wifi_scan_obj.currentScanMode == WIFI_SCAN_OFF) {
           #ifndef HAS_DUAL_BAND
             if (wifi_scan_obj.set_channel < 14)
@@ -907,6 +1338,14 @@ void MenuFunctions::main(uint32_t currentTime)
       #elif defined(MARAUDER_CARDPUTER) || defined(MARAUDER_CARDPUTER_ADV)
       if (this->isKeyPressed(',')) {
       #endif
+        #ifdef MARAUDER_MINI_V3
+        if ((wifi_scan_obj.currentScanMode == WIFI_SCAN_OFF) ||
+            (wifi_scan_obj.currentScanMode == WIFI_CONNECTED) ||
+            (wifi_scan_obj.currentScanMode == OTA_UPDATE)) {
+          this->navigateMiniMenu(-1, 0);
+        }
+        else
+        #endif
         if (wifi_scan_obj.currentScanMode == WIFI_SCAN_OFF) {
           #ifndef HAS_DUAL_BAND
             if (wifi_scan_obj.set_channel > 1)
@@ -4827,6 +5266,10 @@ void MenuFunctions::changeMenu(Menu* menu, bool simple_change) {
 
   current_menu->selected = 0;
 
+  #ifdef HAS_MINI_SCREEN
+    this->resetMiniMenuMarquee();
+  #endif
+
   buildButtons(menu);
 
   displayCurrentMenu();
@@ -4903,7 +5346,15 @@ void MenuFunctions::displayCurrentMenu(int start_index)
 {
   //Serial.println(F("Displaying current menu..."));
   display_obj.clearScreen();
-  display_obj.updateBanner(current_menu->name);
+  #ifdef MARAUDER_MINI_V3
+    String mini_title = current_menu == &mainMenu ? "Marauder Eternal" : current_menu->name;
+    mini_title.trim();
+    if (mini_title.length() > 20)
+      mini_title = mini_title.substring(0, 19) + "~";
+    display_obj.updateBanner(mini_title);
+  #else
+    display_obj.updateBanner(current_menu->name);
+  #endif
   display_obj.tft.setTextColor(TFT_LIGHTGREY, TFT_DARKGREY);
   this->drawStatusBar();
 
@@ -4961,13 +5412,32 @@ void MenuFunctions::displayCurrentMenu(int start_index)
       #endif
 
       #ifdef HAS_MINI_SCREEN
+        const uint16_t text_offset = (current_menu->selected == i &&
+                                      mini_marquee_menu == current_menu &&
+                                      mini_marquee_index == i)
+                                         ? mini_marquee_offset : 0;
         if ((current_menu->selected == i) || ((current_menu->list->get(i).icon != SETTINGS || current_menu->list->get(i).color != TFTLIGHTGREY) && current_menu->list->get(i).selected))
-          this->drawMiniMenuButton(i - start_index, i, true);
+          this->drawMiniMenuButton(i - start_index, i, true, text_offset);
         else 
           this->drawMiniMenuButton(i - start_index, i, false);
       #endif
     }
     display_obj.tft.setFreeFont(NULL);
+
+    #ifdef MARAUDER_MINI_V3
+      if (current_menu != &mainMenu && current_menu != &wifiMenu &&
+          current_menu != &bluetoothMenu && current_menu->list->size() > BUTTON_SCREEN_LIMIT) {
+        constexpr int16_t track_y = 22;
+        constexpr int16_t track_h = 100;
+        display_obj.tft.fillRoundRect(126, track_y, 2, track_h, 1, MINI_UI_BORDER);
+        const int16_t thumb_h = max((int16_t)10,
+            (int16_t)((track_h * BUTTON_SCREEN_LIMIT) / current_menu->list->size()));
+        const int16_t max_start = current_menu->list->size() - BUTTON_SCREEN_LIMIT;
+        const int16_t thumb_y = track_y + (max_start > 0
+            ? ((track_h - thumb_h) * menu_start_index) / max_start : 0);
+        display_obj.tft.fillRoundRect(126, thumb_y, 2, thumb_h, 1, MINI_UI_ACCENT);
+      }
+    #endif
   }
 
   this->displayMenuButtons();

@@ -151,6 +151,19 @@ class MenuFunctions
     uint8_t old_gps_sat_count = 0;
     uint8_t max_graph_value = 0;
 
+    #ifdef HAS_MINI_SCREEN
+      Menu* mini_marquee_menu = nullptr;
+      int16_t mini_marquee_index = -1;
+      uint16_t mini_marquee_offset = 0;
+      int8_t mini_marquee_direction = 1;
+      uint32_t mini_marquee_next_step = 0;
+    #endif
+    #ifdef MARAUDER_MINI_V3
+      uint8_t mini_menu_repeat_direction = 0;
+      bool mini_menu_repeat_enabled = false;
+      uint32_t mini_menu_repeat_next_step = 0;
+    #endif
+
     void buildWiFiFoxHuntMenu();
     void buildBluetoothFoxHuntMenu();
     void buildFoxTargetList(FoxHuntListKind type, int context_ap = -1);
@@ -271,7 +284,14 @@ class MenuFunctions
     void buttonSelected(int b, int x = -1);
     void buttonNotSelected(int b, int x = -1);
     #ifdef HAS_MINI_SCREEN
-      void drawMiniMenuButton(int b, int x, bool selected);
+      void drawMiniMenuButton(int b, int x, bool selected, uint16_t text_offset = 0);
+      void resetMiniMenuMarquee(uint32_t current_time = 0);
+      void updateMiniMenuMarquee(uint32_t current_time);
+      #ifdef MARAUDER_MINI_V3
+        void selectMiniMenuIndex(int target_index);
+        void navigateMiniMenu(int8_t horizontal, int8_t vertical);
+        void updateMiniMenuNavigationRepeat(uint32_t current_time);
+      #endif
     #endif
     //#if (!defined(HAS_ILI9341) && defined(HAS_BUTTONS))
     #ifdef HAS_MINI_KB
