@@ -44,6 +44,27 @@ class MiniV3DetectorTests(unittest.TestCase):
         self.assertIn("MIT License", notices)
         self.assertIn("Copyright (c) 2025 jbohack", notices)
 
+    def test_camera_detector_is_passive_until_explicit_confirmation(self):
+        header = (ROOT / "esp32_marauder" / "WiFiCameraDetector.h").read_text()
+        detector = (ROOT / "esp32_marauder" / "WiFiCameraDetector.cpp").read_text()
+        scan = (ROOT / "esp32_marauder" / "WiFiScan.cpp").read_text()
+        menu = (ROOT / "esp32_marauder" / "MenuFunctions.cpp").read_text()
+
+        self.assertIn("Passively identifies", header)
+        self.assertIn("No frame is transmitted by this function", header)
+        self.assertIn("selectDeauthTarget", detector)
+        self.assertIn('drawString("AUTHORIZED TEST?"', detector)
+        self.assertIn("accepted = true", detector)
+        self.assertIn("WiFiCameraDetector::selectDeauthTarget(target)", menu)
+
+        self.assertIn("WIFI_ATTACK_CAMERA_DEAUTH", scan)
+        self.assertIn("sendCameraDeauthFrame", scan)
+        self.assertIn("stopping_camera_deauth", scan)
+        self.assertIn("memset(&this->camera_deauth_targets", scan)
+
+        for label in ("Camera Detect", "Camera Deauther"):
+            self.assertIn(f'"{label}"', menu)
+
 
 if __name__ == "__main__":
     unittest.main()

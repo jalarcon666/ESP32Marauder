@@ -5,6 +5,7 @@
 
 #include "configs.h"
 #include "utils.h"
+#include "WiFiCameraDetector.h"
 
 #include <ArduinoJson.h>
 #include <algorithm>
@@ -166,6 +167,7 @@
 #define BT_SCAN_FOX_HUNT 84
 #define BT_FINDMY_SOUND 85
 #define BT_ATTACK_FINDMY_LIVE 86
+#define WIFI_ATTACK_CAMERA_DEAUTH 88
 #define WIFI_ATTACK_SSID_GROUP_CLONE 89
 #define WIFI_SCAN_SSID_FINDER 90
 
@@ -416,6 +418,10 @@ class WiFiScan
     uint32_t last_sour_apple_update = 0;
     bool run_setup = true;
     #ifdef MARAUDER_MINI_V3
+      WiFiCameraDetector::DeauthTarget camera_deauth_targets{};
+      uint8_t camera_deauth_cursor = 0;
+      uint8_t camera_deauth_view = 0;
+      uint32_t camera_deauth_next_ui = 0;
       bool ssid_group_scan_pending = false;
       static constexpr uint8_t SSID_FINDER_SAMPLE_WINDOW = 5;
       struct SSIDFinderAP {
@@ -788,6 +794,10 @@ class WiFiScan
     void sendBadMsgAttack(uint32_t currentTime, bool all = false);
     void sendAssocSleepAttack(uint32_t currentTime, bool all = false);
     void sendDeauthFrame(uint8_t bssid[6], int channel, uint8_t mac[6]);
+    #ifdef MARAUDER_MINI_V3
+      void sendCameraDeauthFrame(WiFiCameraDetector::DeauthLink& link);
+      void drawCameraDeauthStatus();
+    #endif
     void sendEapolBagMsg1(uint8_t bssid[6], int channel, uint8_t mac[6], uint8_t sec = WIFI_SECURITY_WPA2);
     void sendAssociationSleep(const char* ESSID, uint8_t bssid[6], int channel, uint8_t mac[6]);
     void broadcastRandomSSID(uint32_t currentTime);
@@ -1107,6 +1117,8 @@ class WiFiScan
     void StartScan(uint8_t scan_mode, uint16_t color = 0);
     void StopScan(uint8_t scan_mode);
     #ifdef MARAUDER_MINI_V3
+      void setCameraDeauthTargets(
+          const WiFiCameraDetector::DeauthTarget& targets);
       void prepareSSIDGroupScan();
       bool prepareSSIDFinder(const String& ssid_name);
       void toggleSSIDFinderLock();

@@ -1,6 +1,7 @@
 #include "MenuFunctions.h"
 #include "lang_var.h"
 #include "BLEDeviceDetectors.h"
+#include "WiFiCameraDetector.h"
 #include "WirelessActivityTools.h"
 #include "WirelessDeviceScout.h"
 
@@ -219,6 +220,7 @@ void MenuFunctions::main(uint32_t currentTime)
       (wifi_scan_obj.currentScanMode != WIFI_ATTACK_AUTH) &&
       (wifi_scan_obj.currentScanMode != WIFI_ATTACK_DEAUTH) &&
       (wifi_scan_obj.currentScanMode != WIFI_ATTACK_DEAUTH_MANUAL) &&
+      (wifi_scan_obj.currentScanMode != WIFI_ATTACK_CAMERA_DEAUTH) &&
       (wifi_scan_obj.currentScanMode != WIFI_ATTACK_DEAUTH_TARGETED) &&
       (wifi_scan_obj.currentScanMode != WIFI_ATTACK_BAD_MSG_TARGETED) &&
       (wifi_scan_obj.currentScanMode != WIFI_ATTACK_BAD_MSG) &&
@@ -337,6 +339,7 @@ void MenuFunctions::main(uint32_t currentTime)
           (wifi_scan_obj.currentScanMode == WIFI_ATTACK_AUTH) ||
           (wifi_scan_obj.currentScanMode == WIFI_ATTACK_DEAUTH) ||
           (wifi_scan_obj.currentScanMode == WIFI_ATTACK_DEAUTH_MANUAL) ||
+          (wifi_scan_obj.currentScanMode == WIFI_ATTACK_CAMERA_DEAUTH) ||
           (wifi_scan_obj.currentScanMode == WIFI_ATTACK_DEAUTH_TARGETED) ||
           (wifi_scan_obj.currentScanMode == WIFI_ATTACK_BAD_MSG_TARGETED) ||
           (wifi_scan_obj.currentScanMode == WIFI_ATTACK_BAD_MSG) ||
@@ -464,6 +467,7 @@ void MenuFunctions::main(uint32_t currentTime)
             (wifi_scan_obj.currentScanMode == WIFI_ATTACK_AUTH) ||
             (wifi_scan_obj.currentScanMode == WIFI_ATTACK_DEAUTH) ||
             (wifi_scan_obj.currentScanMode == WIFI_ATTACK_DEAUTH_MANUAL) ||
+            (wifi_scan_obj.currentScanMode == WIFI_ATTACK_CAMERA_DEAUTH) ||
             (wifi_scan_obj.currentScanMode == WIFI_ATTACK_DEAUTH_TARGETED) ||
             (wifi_scan_obj.currentScanMode == WIFI_ATTACK_BAD_MSG_TARGETED) ||
             (wifi_scan_obj.currentScanMode == WIFI_ATTACK_BAD_MSG) ||
@@ -539,6 +543,7 @@ void MenuFunctions::main(uint32_t currentTime)
         (wifi_scan_obj.currentScanMode != WIFI_ATTACK_AUTH) &&
         (wifi_scan_obj.currentScanMode != WIFI_ATTACK_DEAUTH) &&
         (wifi_scan_obj.currentScanMode != WIFI_ATTACK_DEAUTH_MANUAL) &&
+        (wifi_scan_obj.currentScanMode != WIFI_ATTACK_CAMERA_DEAUTH) &&
         (wifi_scan_obj.currentScanMode != WIFI_ATTACK_DEAUTH_TARGETED) &&
         (wifi_scan_obj.currentScanMode != WIFI_ATTACK_BAD_MSG_TARGETED) &&
         (wifi_scan_obj.currentScanMode != WIFI_ATTACK_BAD_MSG) &&
@@ -2494,6 +2499,11 @@ void MenuFunctions::RunSetup()
       WirelessActivityTools::runJamDetector();
       this->changeMenu(&wifiSnifferMenu, true);
     });
+    this->addNodes(&wifiSnifferMenu, "Camera Detect", TFTCYAN, SCANNERS,
+                   [this]() {
+      WiFiCameraDetector::run();
+      this->changeMenu(&wifiSnifferMenu, true);
+    });
   #endif
   this->addNodes(&wifiSnifferMenu, "SAE Commit", TFTLIME, EAPOL, [this]() {
     display_obj.clearScreen();
@@ -2633,6 +2643,19 @@ void MenuFunctions::RunSetup()
       display_obj.clearScreen();
       this->drawStatusBar();
       wifi_scan_obj.StartScan(WIFI_ATTACK_DEAUTH, TFT_RED);
+    });
+    this->addNodes(&wifiAttackMenu, "Camera Deauther", TFTRED,
+                   DEAUTH_SNIFF, [this]() {
+      static WiFiCameraDetector::DeauthTarget target{};
+      if (!WiFiCameraDetector::selectDeauthTarget(target)) {
+        display_obj.init();
+        this->changeMenu(&wifiAttackMenu, true);
+        return;
+      }
+      wifi_scan_obj.setCameraDeauthTargets(target);
+      display_obj.clearScreen();
+      this->drawStatusBar();
+      wifi_scan_obj.StartScan(WIFI_ATTACK_CAMERA_DEAUTH, TFT_RED);
     });
   #endif
 
