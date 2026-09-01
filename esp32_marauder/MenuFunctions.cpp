@@ -2,6 +2,7 @@
 #include "lang_var.h"
 #include "BLEDeviceDetectors.h"
 #include "WiFiCameraDetector.h"
+#include "WiFiFlockDetector.h"
 #include "WirelessActivityTools.h"
 #include "WirelessDeviceScout.h"
 
@@ -2961,6 +2962,11 @@ void MenuFunctions::RunSetup()
     this->addNodes(&wifiSnifferMenu, "Camera Detect", TFTCYAN, SCANNERS,
                    [this]() {
       WiFiCameraDetector::run();
+      this->changeMenu(&wifiSnifferMenu, true);
+    });
+    this->addNodes(&wifiSnifferMenu, "Detect Flock", TFTORANGE, FLOCK,
+                   [this]() {
+      WiFiFlockDetector::run();
       this->changeMenu(&wifiSnifferMenu, true);
     });
   #endif

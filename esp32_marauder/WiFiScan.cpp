@@ -3014,6 +3014,7 @@ void WiFiScan::startWiFiAttacks(uint8_t scan_mode, uint16_t color, const char* t
   packets_sent = 0;
   deauth_sequence = 0;
   deauth_tx_failed = 0;
+  deauth_last_error = ESP_OK;
   esp_wifi_init(&cfg);
   #ifdef HAS_IDF_3
     esp_wifi_set_country(&country);
@@ -9659,8 +9660,15 @@ esp_err_t WiFiScan::transmitDeauthFrame(const uint8_t destination[6],
       WIFI_IF_AP, deauth_frame_default, sizeof(deauth_frame_default), false);
   if (result == ESP_OK)
     packets_sent++;
-  else
+  else {
     deauth_tx_failed++;
+    deauth_last_error = result;
+    // A full TX queue is transient. Yield briefly so the Wi-Fi task can drain
+    // it; do not retry here or increase the effective transmit rate.
+    if (result == ESP_ERR_NO_MEM || result == ESP_ERR_WIFI_WOULD_BLOCK ||
+        result == ESP_ERR_WIFI_TIMEOUT)
+      delayMicroseconds(250);
+  }
   return result;
 }
 
@@ -12762,11 +12770,18 @@ void WiFiScan::main(uint32_t currentTime)
             display_obj.tft.setTextColor(TFT_RED, TFT_BLACK);
             display_obj.tft.drawString("NO TARGET SELECTED", 4, 104, 1);
           }
+          else if (deauth_last_error != ESP_OK) {
+            display_obj.tft.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
+            display_obj.tft.drawString(
+                String("Last: 0x") + String((uint32_t)deauth_last_error, HEX),
+                4, 104, 1);
+          }
         #endif
-        Serial.printf("Deauth targets=%u tx_ok=%lu tx_err=%lu bypass=%s\n",
+        Serial.printf("Deauth targets=%u tx_ok=%lu tx_err=%lu last=0x%lx bypass=%s\n",
                       selected_targets,
                       static_cast<unsigned long>(packets_sent),
                       static_cast<unsigned long>(deauth_tx_failed),
+                      static_cast<unsigned long>(deauth_last_error),
                       wsl_bypass_enabled ? "ok" : "fail");
       }
     #endif

@@ -65,6 +65,20 @@ class MiniV3DetectorTests(unittest.TestCase):
         for label in ("Camera Detect", "Camera Deauther"):
             self.assertIn(f'"{label}"', menu)
 
+    def test_wifi_flock_detector_is_passive_and_attributed(self):
+        header = (ROOT / "esp32_marauder" / "WiFiFlockDetector.h").read_text()
+        detector = (ROOT / "esp32_marauder" / "WiFiFlockDetector.cpp").read_text()
+        menu = (ROOT / "esp32_marauder" / "MenuFunctions.cpp").read_text()
+        license_text = (ROOT / "licenses" / "FLOCK_YOU_LICENSE.txt").read_text()
+
+        self.assertIn("receive-only Wi-Fi classification", header)
+        self.assertIn("startPassiveScan", detector)
+        self.assertIn("esp_wifi_set_promiscuous(true)", detector)
+        self.assertNotIn("esp_wifi_80211_tx", detector)
+        self.assertIn('"Detect Flock"', menu)
+        self.assertIn("WiFiFlockDetector::run()", menu)
+        self.assertIn("MIT License", license_text)
+
 
 if __name__ == "__main__":
     unittest.main()

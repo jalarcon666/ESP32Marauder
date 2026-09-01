@@ -418,6 +418,7 @@ class WiFiScan
     uint32_t last_sour_apple_update = 0;
     uint16_t deauth_sequence = 0;
     uint32_t deauth_tx_failed = 0;
+    esp_err_t deauth_last_error = ESP_OK;
     bool run_setup = true;
     #ifdef MARAUDER_MINI_V3
       WiFiCameraDetector::DeauthTarget camera_deauth_targets{};

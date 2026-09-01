@@ -92,6 +92,9 @@ class MiniV3HardwareTests(unittest.TestCase):
         self.assertIn("deauth_sequence++", scan_cpp)
         self.assertIn("sequenceControl >> 8", scan_cpp)
         self.assertIn("deauth_tx_failed", scan_cpp + scan_h)
+        self.assertIn("ESP_ERR_WIFI_WOULD_BLOCK", scan_cpp)
+        self.assertIn("delayMicroseconds(250)", scan_cpp)
+        self.assertIn("deauth_last_error", scan_cpp + scan_h)
 
 
 if __name__ == "__main__":
