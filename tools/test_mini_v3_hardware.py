@@ -41,6 +41,8 @@ class MiniV3HardwareTests(unittest.TestCase):
         self.assertIn('#define TFT_BACKLIGHT_ON LOW', setup)
         self.assertIn('#define SPI_FREQUENCY 20000000', setup)
         self.assertIn('MARAUDER_MINI_V3 requires the ESP32-C5 board target', configs)
+        self.assertIn('Six 15px rows plus 2px spacing fit', configs)
+        self.assertIn('#define BUTTON_SCREEN_LIMIT 6', configs)
 
     def test_custom_partition_layout_is_wired_into_every_build(self):
         partition_file = ROOT / "installer" / "partitions" / "mini_v3.csv"
