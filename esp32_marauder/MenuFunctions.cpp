@@ -1,5 +1,8 @@
 #include "MenuFunctions.h"
 #include "lang_var.h"
+#include "BLEDeviceDetectors.h"
+#include "WirelessActivityTools.h"
+#include "WirelessDeviceScout.h"
 
 #ifdef HAS_SCREEN
 
@@ -2475,6 +2478,23 @@ void MenuFunctions::RunSetup()
     this->drawStatusBar();
     wifi_scan_obj.StartScan(WIFI_SCAN_DETECT_FOLLOW, TFT_MAGENTA);
   });
+  #ifdef MARAUDER_MINI_V3
+    this->addNodes(&wifiSnifferMenu, "Device Scout", TFTGREEN, SCANNERS,
+                   [this]() {
+      WirelessDeviceScout::run();
+      this->changeMenu(&wifiSnifferMenu, true);
+    });
+    this->addNodes(&wifiSnifferMenu, "Activity Scanner", TFTCYAN,
+                   PACKET_MONITOR, [this]() {
+      WirelessActivityTools::runScanner();
+      this->changeMenu(&wifiSnifferMenu, true);
+    });
+    this->addNodes(&wifiSnifferMenu, "Jam Detector", TFTRED, SCANNERS,
+                   [this]() {
+      WirelessActivityTools::runJamDetector();
+      this->changeMenu(&wifiSnifferMenu, true);
+    });
+  #endif
   this->addNodes(&wifiSnifferMenu, "SAE Commit", TFTLIME, EAPOL, [this]() {
     display_obj.clearScreen();
     this->drawStatusBar();
@@ -3630,6 +3650,43 @@ void MenuFunctions::RunSetup()
     this->drawStatusBar();
     wifi_scan_obj.StartScan(BT_SCAN_RAYBAN, TFT_CYAN);
   });
+  #ifdef MARAUDER_MINI_V3
+    this->addNodes(&bluetoothSnifferMenu, "Meshtastic Sniff", TFTGREEN,
+                   BLUETOOTH_SNIFF, [this]() {
+      BLEDeviceDetectors::run(BLEDeviceDetectors::DetectorType::Meshtastic);
+      this->changeMenu(&bluetoothSnifferMenu, true);
+    });
+    this->addNodes(&bluetoothSnifferMenu, "MeshCore Sniff", TFTCYAN,
+                   BLUETOOTH_SNIFF, [this]() {
+      BLEDeviceDetectors::run(BLEDeviceDetectors::DetectorType::MeshCore);
+      this->changeMenu(&bluetoothSnifferMenu, true);
+    });
+    this->addNodes(&bluetoothSnifferMenu, "SmartTag Sniff", TFTYELLOW,
+                   BLUETOOTH_SNIFF, [this]() {
+      BLEDeviceDetectors::run(BLEDeviceDetectors::DetectorType::SmartTag);
+      this->changeMenu(&bluetoothSnifferMenu, true);
+    });
+    this->addNodes(&bluetoothSnifferMenu, "Tile Sniff", TFTORANGE,
+                   BLUETOOTH_SNIFF, [this]() {
+      BLEDeviceDetectors::run(BLEDeviceDetectors::DetectorType::Tile);
+      this->changeMenu(&bluetoothSnifferMenu, true);
+    });
+    this->addNodes(&bluetoothSnifferMenu, "Axon Sniff", TFTRED,
+                   BLUETOOTH_SNIFF, [this]() {
+      BLEDeviceDetectors::run(BLEDeviceDetectors::DetectorType::Axon);
+      this->changeMenu(&bluetoothSnifferMenu, true);
+    });
+    this->addNodes(&bluetoothSnifferMenu, "iBeacon Sniff", TFTPURPLE,
+                   BLUETOOTH_SNIFF, [this]() {
+      BLEDeviceDetectors::run(BLEDeviceDetectors::DetectorType::IBeacon);
+      this->changeMenu(&bluetoothSnifferMenu, true);
+    });
+    this->addNodes(&bluetoothSnifferMenu, "nyanBOX Sniff", TFTMAGENTA,
+                   BLUETOOTH_SNIFF, [this]() {
+      BLEDeviceDetectors::run(BLEDeviceDetectors::DetectorType::NyanBox);
+      this->changeMenu(&bluetoothSnifferMenu, true);
+    });
+  #endif
   this->addNodes(&bluetoothSnifferMenu, "Fox Hunt", TFTCYAN, SCANNERS, [this]() {
     this->buildBluetoothFoxHuntMenu();
   });
