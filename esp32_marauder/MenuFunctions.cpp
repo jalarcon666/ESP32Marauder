@@ -5,6 +5,7 @@
 #include "WiFiFlockDetector.h"
 #include "WirelessActivityTools.h"
 #include "WirelessDeviceScout.h"
+#include "DroneRemoteID.h"
 
 #ifdef HAS_SCREEN
 
@@ -2962,6 +2963,11 @@ void MenuFunctions::RunSetup()
     this->addNodes(&wifiSnifferMenu, "Camera Detect", TFTCYAN, SCANNERS,
                    [this]() {
       WiFiCameraDetector::run();
+      this->changeMenu(&wifiSnifferMenu, true);
+    });
+    this->addNodes(&wifiSnifferMenu, "Drone Remote ID", TFTORANGE,
+                   SCANNERS, [this]() {
+      DroneRemoteID::run();
       this->changeMenu(&wifiSnifferMenu, true);
     });
     this->addNodes(&wifiSnifferMenu, "Detect Flock", TFTORANGE, FLOCK,
