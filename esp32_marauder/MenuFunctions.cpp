@@ -1043,11 +1043,20 @@ void MenuFunctions::updateStatusBar()
 
   // GPS Stuff
   #ifdef HAS_GPS
-    if (gps_obj.getGpsModuleStatus()) {
-      if (gps_obj.getFixStatus())
+    #ifdef MARAUDER_MINI_V3
+      const bool show_gps_status = gps_obj.getFixStatus();
+    #else
+      const bool show_gps_status = gps_obj.getGpsModuleStatus();
+    #endif
+    if (show_gps_status) {
+      #ifdef MARAUDER_MINI_V3
         the_color = TFT_GREEN;
-      else
-        the_color = TFT_RED;
+      #else
+        if (gps_obj.getFixStatus())
+          the_color = TFT_GREEN;
+        else
+          the_color = TFT_RED;
+      #endif
         
       #ifdef HAS_FULL_SCREEN
         display_obj.tft.drawXBitmap(4,
@@ -1229,11 +1238,20 @@ void MenuFunctions::drawStatusBar()
 
   // GPS Stuff
   #ifdef HAS_GPS
-    if (gps_obj.getGpsModuleStatus()) {
-      if (gps_obj.getFixStatus())
+    #ifdef MARAUDER_MINI_V3
+      const bool show_gps_status = gps_obj.getFixStatus();
+    #else
+      const bool show_gps_status = gps_obj.getGpsModuleStatus();
+    #endif
+    if (show_gps_status) {
+      #ifdef MARAUDER_MINI_V3
         the_color = TFT_GREEN;
-      else
-        the_color = TFT_RED;
+      #else
+        if (gps_obj.getFixStatus())
+          the_color = TFT_GREEN;
+        else
+          the_color = TFT_RED;
+      #endif
         
       #ifdef HAS_FULL_SCREEN
         display_obj.tft.drawXBitmap(4,
@@ -1795,6 +1813,14 @@ void MenuFunctions::RunSetup()
   extern LinkedList<ssid>* ssids;
   extern LinkedList<BleDevice>* ble_devices;
 
+  #ifdef HAS_GPS
+    #ifdef MARAUDER_MINI_V3
+      const bool expose_gps_features = true;
+    #else
+      const bool expose_gps_features = gps_obj.getGpsModuleStatus();
+    #endif
+  #endif
+
   this->disable_touch = false;
 
   #if defined(MARAUDER_CARDPUTER) || defined(MARAUDER_CARDPUTER_ADV)
@@ -1811,7 +1837,7 @@ void MenuFunctions::RunSetup()
 #endif
   deviceMenu.list = new LinkedList<MenuNode>();
   #ifdef HAS_GPS
-    if (gps_obj.getGpsModuleStatus()) {
+    if (expose_gps_features) {
       gpsMenu.list = new LinkedList<MenuNode>();
       gpsInfoMenu.list = new LinkedList<MenuNode>();
     }
@@ -1956,7 +1982,7 @@ void MenuFunctions::RunSetup()
     });
   #endif
   #ifdef HAS_GPS
-	if (gps_obj.getGpsModuleStatus()) {
+	if (expose_gps_features) {
     	this->addNodes(&mainMenu, text1_66, TFTRED, GPS_MENU, [this]() {
       	this->changeMenu(&gpsMenu, true);
     	});
@@ -2178,7 +2204,7 @@ void MenuFunctions::RunSetup()
     this->addNodes(&wardrivingMenu, text09, TFTLIGHTGREY, NULL, 0, [this]() {
       this->changeMenu(wardrivingMenu.parentMenu, true);
     });*/
-    if (gps_obj.getGpsModuleStatus()) {
+    if (expose_gps_features) {
       this->addNodes(&wifiSnifferMenu, "Wardrive", TFTGREEN, BEACON_SNIFF, [this]() {
         display_obj.clearScreen();
         this->drawStatusBar();
@@ -3591,7 +3617,7 @@ void MenuFunctions::RunSetup()
 
   // GPS Menu
   #ifdef HAS_GPS
-    if (gps_obj.getGpsModuleStatus()) {
+    if (expose_gps_features) {
       gpsMenu.parentMenu = &mainMenu; // Main Menu is second menu parent
 
       this->addNodes(&gpsMenu, text09, TFTLIGHTGREY, 0, [this]() {

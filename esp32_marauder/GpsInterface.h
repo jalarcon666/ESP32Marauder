@@ -57,6 +57,10 @@ class GpsInterface {
     String getNmea();
     String getNmeaNotimp();
     String getNmeaNotparsed();
+    #ifdef MARAUDER_MINI_V3
+      uint32_t getBaudRate();
+      uint32_t getLastSentenceAgeMs();
+    #endif
 
     void setType(String t);
 
@@ -105,6 +109,14 @@ class GpsInterface {
     bool good_fix = false;
     char nav_system='\0';
     uint8_t num_sats = 0;
+    #ifdef MARAUDER_MINI_V3
+      uint32_t gps_baud = 0;
+      uint32_t listening_baud = 0;
+      uint32_t last_sentence_ms = 0;
+      uint32_t last_fix_sentence_ms = 0;
+      uint32_t last_baud_switch_ms = 0;
+      uint8_t recovery_baud_index = 0;
+    #endif
 
     type_t type_flag = GPSTYPE_NATIVE;
 
@@ -121,9 +133,14 @@ class GpsInterface {
     void flush_queue_nmea();
     String dt_string_from_gps();
     void setGPSInfo();
-    bool probeBaud(uint32_t baud);
-    void setGpsTo115200From9600();
-    uint32_t initGpsBaudAndForce115200();
+    #ifdef MARAUDER_MINI_V3
+      void handleCompletedSentence();
+      void listenAtBaud(uint32_t baud);
+    #else
+      bool probeBaud(uint32_t baud);
+      void setGpsTo115200From9600();
+      uint32_t initGpsBaudAndForce115200();
+    #endif
 };
 
 #endif

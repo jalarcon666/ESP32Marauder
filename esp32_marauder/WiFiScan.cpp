@@ -4060,6 +4060,21 @@ bool WiFiScan::RunGPSInfo(bool tracker, bool display, bool poi) {
           return_val = false;
           display_obj.tft.println(F("  Good Fix: No"));
         }
+
+        #ifdef MARAUDER_MINI_V3
+          display_obj.tft.println(gps_obj.getGpsModuleStatus()
+                                      ? F("  NMEA: Active")
+                                      : F("  NMEA: Searching"));
+          if (gps_obj.getBaudRate() != 0)
+            display_obj.tft.println("  Baud: " + String(gps_obj.getBaudRate()));
+          else
+            display_obj.tft.println(F("  Baud: Auto"));
+          const uint32_t display_sentence_age = gps_obj.getLastSentenceAgeMs();
+          if (display_sentence_age != UINT32_MAX)
+            display_obj.tft.println("  Age: " + String(display_sentence_age) + " ms");
+          else
+            display_obj.tft.println(F("  Age: --"));
+        #endif
           
         if(text != "") display_obj.tft.println("      Text: " + text);
 
@@ -4077,6 +4092,21 @@ bool WiFiScan::RunGPSInfo(bool tracker, bool display, bool poi) {
         Serial.println(F("  Fix: Yes"));
       else
         Serial.println(F("  Fix: No"));
+
+      #ifdef MARAUDER_MINI_V3
+        Serial.println(gps_obj.getGpsModuleStatus()
+                           ? F(" NMEA: Active")
+                           : F(" NMEA: Searching"));
+        if (gps_obj.getBaudRate() != 0)
+          Serial.println(" Baud: " + String(gps_obj.getBaudRate()));
+        else
+          Serial.println(F(" Baud: Auto"));
+        const uint32_t sentence_age = gps_obj.getLastSentenceAgeMs();
+        if (sentence_age != UINT32_MAX)
+          Serial.println("  Age: " + String(sentence_age) + " ms");
+        else
+          Serial.println(F("  Age: --"));
+      #endif
         
       if(text != "") Serial.println("      Text: " + text);
 
