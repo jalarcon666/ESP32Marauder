@@ -6,6 +6,8 @@
 #include "WirelessActivityTools.h"
 #include "WirelessDeviceScout.h"
 #include "DroneRemoteID.h"
+#include "DroneRemoteIDSpoofer.h"
+#include "BLESecurityTools.h"
 
 #ifdef HAS_SCREEN
 
@@ -776,6 +778,7 @@ void MenuFunctions::main(uint32_t currentTime)
           (wifi_scan_obj.currentScanMode == WIFI_ATTACK_RICK_ROLL) ||
           (wifi_scan_obj.currentScanMode == WIFI_ATTACK_BEACON_LIST) ||
           (wifi_scan_obj.currentScanMode == BT_SCAN_ALL) ||
+          (wifi_scan_obj.currentScanMode == BT_SCAN_ADVERTISEMENT_CAPTURE) ||
           (wifi_scan_obj.currentScanMode == BT_SCAN_FOX_HUNT) ||
           (wifi_scan_obj.currentScanMode == WIFI_SCAN_SIG_STREN) ||
           (wifi_scan_obj.currentScanMode == BT_ATTACK_FINDMY_LIVE) ||
@@ -904,6 +907,7 @@ void MenuFunctions::main(uint32_t currentTime)
             (wifi_scan_obj.currentScanMode == WIFI_ATTACK_RICK_ROLL) ||
             (wifi_scan_obj.currentScanMode == WIFI_ATTACK_BEACON_LIST) ||
             (wifi_scan_obj.currentScanMode == BT_SCAN_ALL) ||
+            (wifi_scan_obj.currentScanMode == BT_SCAN_ADVERTISEMENT_CAPTURE) ||
             (wifi_scan_obj.currentScanMode == BT_SCAN_FOX_HUNT) ||
             (wifi_scan_obj.currentScanMode == BT_SCAN_RAYBAN) ||
             (wifi_scan_obj.currentScanMode == BT_SCAN_AIRTAG) ||
@@ -2599,6 +2603,9 @@ void MenuFunctions::RunSetup()
   // Bluetooth menu stuff
   bluetoothSnifferMenu.list = new LinkedList<MenuNode>();
   bluetoothAttackMenu.list = new LinkedList<MenuNode>();
+  bleSecurityMenu.list = new LinkedList<MenuNode>();
+  bleTargetMenu.list = new LinkedList<MenuNode>();
+  bleConfirmMenu.list = new LinkedList<MenuNode>();
 
   // Settings stuff
   generateSSIDsMenu.list = new LinkedList<MenuNode>();
@@ -2655,6 +2662,9 @@ void MenuFunctions::RunSetup()
 
   bluetoothSnifferMenu.name = text_table1[23];
   bluetoothAttackMenu.name = "Bluetooth Attacks";
+  bleSecurityMenu.name = "BLE Discovery";
+  bleTargetMenu.name = "BLE Targets";
+  bleConfirmMenu.name = "Confirm BLE Action";
   generateSSIDsMenu.name = text_table1[27];
   clearSSIDsMenu.name = text_table1[28];
   clearAPsMenu.name = text_table1[29];
@@ -3127,6 +3137,30 @@ void MenuFunctions::RunSetup()
       display_obj.clearScreen();
       this->drawStatusBar();
       wifi_scan_obj.StartScan(WIFI_ATTACK_CAMERA_DEAUTH, TFT_RED);
+    });
+    this->addNodes(&wifiAttackMenu, "Drone Spoof", TFTRED, ATTACKS,
+                   [this]() {
+      static DroneRemoteID::CapturedDrone target{};
+      if (!DroneRemoteID::selectCapturedForSpoof(target) ||
+          !DroneRemoteIDSpoofer::selectTarget(target)) {
+        display_obj.init();
+        this->changeMenu(&wifiAttackMenu, true);
+        return;
+      }
+      bleConfirmMenu.list->clear();
+      bleConfirmMenu.name = "Authorize Drone Spoof";
+      bleConfirmMenu.parentMenu = &wifiAttackMenu;
+      this->addNodes(&bleConfirmMenu, "Cancel", TFTLIGHTGREY, 0,
+                     [this]() {
+        this->changeMenu(bleConfirmMenu.parentMenu, true);
+      });
+      this->addNodes(&bleConfirmMenu, "Run (Authorized)", TFTRED,
+                     ATTACKS, [this]() {
+        DroneRemoteIDSpoofer::run();
+        display_obj.init();
+        this->changeMenu(&wifiAttackMenu, true);
+      });
+      this->changeMenu(&bleConfirmMenu, true);
     });
   #endif
 
@@ -4096,6 +4130,85 @@ void MenuFunctions::RunSetup()
   });
   this->addNodes(&bluetoothMenu, "Bluetooth Attacks", TFTRED, ATTACKS, [this]() {
     this->changeMenu(&bluetoothAttackMenu, true);
+  });
+  this->addNodes(&bluetoothMenu, "BLE Discovery", TFTCYAN, BLUETOOTH,
+                 [this]() {
+    this->changeMenu(&bleSecurityMenu, true);
+  });
+
+  bleSecurityMenu.parentMenu = &bluetoothMenu;
+  this->addNodes(&bleSecurityMenu, text09, TFTLIGHTGREY, 0, [this]() {
+    this->changeMenu(bleSecurityMenu.parentMenu, true);
+  });
+  this->addNodes(&bleSecurityMenu, "Scan Targets", TFTGREEN,
+                 BLUETOOTH_SNIFF, [this]() {
+    display_obj.clearScreen();
+    this->drawStatusBar();
+    wifi_scan_obj.StartScan(BT_SCAN_ALL, TFT_GREEN);
+  });
+  this->addNodes(&bleSecurityMenu, "Capture Adverts to SD", TFTORANGE,
+                 SD_UPDATE, [this]() {
+    display_obj.clearScreen();
+    this->drawStatusBar();
+    if (!wifi_scan_obj.startBLEAdvertisementCapture()) {
+      display_obj.tft.setTextColor(TFT_RED, TFT_BLACK);
+      display_obj.tft.setCursor(3, 24);
+      display_obj.tft.println("Mounted SD card required");
+      delay(1500);
+      this->changeMenu(&bleSecurityMenu, true);
+    }
+  });
+  this->addNodes(&bleSecurityMenu, "Select Target", TFTCYAN, SCANNERS,
+                 [this]() {
+    bleTargetMenu.list->clear();
+    bleTargetMenu.parentMenu = &bleSecurityMenu;
+    this->addNodes(&bleTargetMenu, text09, TFTLIGHTGREY, 0, [this]() {
+      this->changeMenu(bleTargetMenu.parentMenu, true);
+    });
+    const int menuLimit = min(ble_devices->size(), 40);
+    for (int index = 0; index < menuLimit; index++) {
+      const BleDevice device = ble_devices->get(index);
+      const String label = BLESecurityTools::deviceDisplayLabel(device);
+      const uint8_t color = device.connectable ? TFTGREEN : TFTDARKGREY;
+      this->addNodes(&bleTargetMenu, label.c_str(), color, BLUETOOTH,
+                     [this, index]() {
+        if (index >= 0 && index < ble_devices->size())
+          BLESecurityTools::selectTarget(ble_devices->get(index));
+        this->changeMenu(&bleSecurityMenu, true);
+      });
+    }
+    if (menuLimit == 0)
+      this->addNodes(&bleTargetMenu, "Run Scan Targets first",
+                     TFTDARKGREY, DEVICE_INFO, []() {});
+    this->changeMenu(&bleTargetMenu, true);
+  });
+  this->addNodes(&bleSecurityMenu, "Advertised Info", TFTCYAN,
+                 DEVICE_INFO, [this]() {
+    BLESecurityTools::showAdvertisedInfo();
+    display_obj.init();
+    this->changeMenu(&bleSecurityMenu, true);
+  });
+  this->addNodes(&bleSecurityMenu, "GATT Enumeration", TFTGREEN,
+                 DEVICE_INFO, [this]() {
+    BLESecurityTools::inspectTarget();
+    display_obj.init();
+    this->changeMenu(&bleSecurityMenu, true);
+  });
+  this->addNodes(&bleSecurityMenu, "Device Spoof", TFTMAGENTA,
+                 BLUETOOTH, [this]() {
+    bleConfirmMenu.list->clear();
+    bleConfirmMenu.name = "Authorize Device Spoof";
+    bleConfirmMenu.parentMenu = &bleSecurityMenu;
+    this->addNodes(&bleConfirmMenu, "Cancel", TFTLIGHTGREY, 0, [this]() {
+      this->changeMenu(bleConfirmMenu.parentMenu, true);
+    });
+    this->addNodes(&bleConfirmMenu, "Run (Authorized)", TFTRED,
+                   ATTACKS, [this]() {
+      BLESecurityTools::runDeviceSpoof();
+      display_obj.init();
+      this->changeMenu(&bleSecurityMenu, true);
+    });
+    this->changeMenu(&bleConfirmMenu, true);
   });
 
   // Build bluetooth sniffer Menu

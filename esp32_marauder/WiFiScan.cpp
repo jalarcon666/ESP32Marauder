@@ -671,6 +671,7 @@ extern "C" {
             }
           }
           else if ((wifi_scan_obj.currentScanMode == BT_SCAN_ALL) ||
+                   (wifi_scan_obj.currentScanMode == BT_SCAN_ADVERTISEMENT_CAPTURE) ||
                    (wifi_scan_obj.currentScanMode == BT_SCAN_FOX_HUNT)) {
             if (buf >= 0)
             {
@@ -683,13 +684,66 @@ extern "C" {
               ble_device.rssi = rssi;
 
               memcpy(ble_device.mac, mac_char, sizeof(mac_char));
+              ble_device.addressType = advertisedDevice->getAddressType();
+              ble_device.connectable = advertisedDevice->isConnectable();
+              ble_device.scannable = advertisedDevice->isScannable();
+              if (advertisedDevice->haveAppearance()) {
+                ble_device.appearance = advertisedDevice->getAppearance();
+                ble_device.hasAppearance = true;
+              }
+              for (uint8_t serviceIndex = 0;
+                   serviceIndex < advertisedDevice->getServiceUUIDCount();
+                   serviceIndex++) {
+                if (serviceIndex) ble_device.advertisedServices += ",";
+                ble_device.advertisedServices +=
+                    advertisedDevice->getServiceUUID(serviceIndex)
+                        .toString().c_str();
+              }
+              {
+                const uint8_t* payload = advertisedDevice->getPayload();
+                const size_t payloadLength =
+                    advertisedDevice->getPayloadLength();
+                const size_t advertisementLength = min(
+                    static_cast<size_t>(advertisedDevice->getAdvLength()),
+                    payloadLength);
+                ble_device.advertisementLength = min(
+                    advertisementLength,
+                    sizeof(ble_device.advertisementData));
+                memcpy(ble_device.advertisementData, payload,
+                       ble_device.advertisementLength);
+                const size_t scanResponseLength =
+                    payloadLength - advertisementLength;
+                ble_device.scanResponseLength = min(
+                    scanResponseLength,
+                    sizeof(ble_device.scanResponseData));
+                memcpy(ble_device.scanResponseData,
+                       payload + advertisementLength,
+                       ble_device.scanResponseLength);
+                ble_device.advertisementTruncated =
+                    advertisementLength > sizeof(ble_device.advertisementData) ||
+                    scanResponseLength > sizeof(ble_device.scanResponseData);
+              }
+              if (advertisedDevice->haveManufacturerData()) {
+                const std::string manufacturerData =
+                    advertisedDevice->getManufacturerData();
+                if (manufacturerData.size() >= 2) {
+                  ble_device.companyId =
+                      static_cast<uint8_t>(manufacturerData[0]) |
+                      (static_cast<uint16_t>(
+                          static_cast<uint8_t>(manufacturerData[1])) << 8);
+                  ble_device.hasCompanyId = true;
+                }
+              }
 
               int device_match_check = wifi_scan_obj.seenBLEDevice(ble_device);
 
               if (device_match_check >= 0) {
-                ble_device.selected = ble_devices->get(device_match_check).selected;
-                ble_device.name = ble_devices->get(device_match_check).name;
-                memcpy(ble_device.mac, ble_devices->get(device_match_check).mac, sizeof(mac_char));
+                const BleDevice previous = ble_devices->get(device_match_check);
+                ble_device.selected = previous.selected;
+                if (!ble_device.hasCompanyId && previous.hasCompanyId) {
+                  ble_device.companyId = previous.companyId;
+                  ble_device.hasCompanyId = true;
+                }
                 ble_devices->set(device_match_check, ble_device);
                 //Serial.println(ble_devices->get(device_match_check).name + " RSSI updated: " + String(ble_devices->get(device_match_check).rssi));
                 return;
@@ -1368,9 +1422,14 @@ extern "C" {
             }
           }
           else if ((wifi_scan_obj.currentScanMode == BT_SCAN_ALL) ||
+                   (wifi_scan_obj.currentScanMode == BT_SCAN_ADVERTISEMENT_CAPTURE) ||
                    (wifi_scan_obj.currentScanMode == BT_SCAN_FOX_HUNT)) {
             if (buf >= 0)
             {
+              if (wifi_scan_obj.currentScanMode ==
+                  BT_SCAN_ADVERTISEMENT_CAPTURE)
+                wifi_scan_obj.captureBLEAdvertisement(advertisedDevice);
+
               BleDevice ble_device;
               if (name_length > 0)
                 ble_device.name = name;
@@ -1380,13 +1439,65 @@ extern "C" {
               ble_device.rssi = rssi;
 
               memcpy(ble_device.mac, mac_char, sizeof(mac_char));
+              ble_device.addressType = advertisedDevice->getAddressType();
+              ble_device.connectable = advertisedDevice->isConnectable();
+              ble_device.scannable = advertisedDevice->isScannable();
+              if (advertisedDevice->haveAppearance()) {
+                ble_device.appearance = advertisedDevice->getAppearance();
+                ble_device.hasAppearance = true;
+              }
+              for (uint8_t serviceIndex = 0;
+                   serviceIndex < advertisedDevice->getServiceUUIDCount();
+                   serviceIndex++) {
+                if (serviceIndex) ble_device.advertisedServices += ",";
+                ble_device.advertisedServices +=
+                    advertisedDevice->getServiceUUID(serviceIndex)
+                        .toString().c_str();
+              }
+              {
+                const std::vector<uint8_t>& payload =
+                    advertisedDevice->getPayload();
+                const size_t advertisementLength = min(
+                    static_cast<size_t>(advertisedDevice->getAdvLength()),
+                    payload.size());
+                ble_device.advertisementLength = min(
+                    advertisementLength,
+                    sizeof(ble_device.advertisementData));
+                memcpy(ble_device.advertisementData, payload.data(),
+                       ble_device.advertisementLength);
+                const size_t scanResponseLength =
+                    payload.size() - advertisementLength;
+                ble_device.scanResponseLength = min(
+                    scanResponseLength,
+                    sizeof(ble_device.scanResponseData));
+                memcpy(ble_device.scanResponseData,
+                       payload.data() + advertisementLength,
+                       ble_device.scanResponseLength);
+                ble_device.advertisementTruncated =
+                    advertisementLength > sizeof(ble_device.advertisementData) ||
+                    scanResponseLength > sizeof(ble_device.scanResponseData);
+              }
+              if (advertisedDevice->haveManufacturerData()) {
+                const std::string manufacturerData =
+                    advertisedDevice->getManufacturerData();
+                if (manufacturerData.size() >= 2) {
+                  ble_device.companyId =
+                      static_cast<uint8_t>(manufacturerData[0]) |
+                      (static_cast<uint16_t>(
+                          static_cast<uint8_t>(manufacturerData[1])) << 8);
+                  ble_device.hasCompanyId = true;
+                }
+              }
 
               int device_match_check = wifi_scan_obj.seenBLEDevice(ble_device);
 
               if (device_match_check >= 0) {
-                ble_device.selected = ble_devices->get(device_match_check).selected;
-                ble_device.name = ble_devices->get(device_match_check).name;
-                memcpy(ble_device.mac, ble_devices->get(device_match_check).mac, sizeof(mac_char));
+                const BleDevice previous = ble_devices->get(device_match_check);
+                ble_device.selected = previous.selected;
+                if (!ble_device.hasCompanyId && previous.hasCompanyId) {
+                  ble_device.companyId = previous.companyId;
+                  ble_device.hasCompanyId = true;
+                }
                 ble_devices->set(device_match_check, ble_device);
                 //Serial.println(ble_devices->get(device_match_check).name + " RSSI updated: " + String(ble_devices->get(device_match_check).rssi));
                 return;
@@ -2813,6 +2924,7 @@ void WiFiScan::StartScan(uint8_t scan_mode, uint16_t color) {
       this->startWiFiAttacks(scan_mode, color, "SSID Beacon Clone");
   #endif
   else if ((scan_mode == BT_SCAN_ALL) ||
+          (scan_mode == BT_SCAN_ADVERTISEMENT_CAPTURE) ||
           (scan_mode == BT_SCAN_FOX_HUNT) ||
           (scan_mode == BT_SCAN_RAYBAN) ||
           (scan_mode == BT_SCAN_AIRTAG) ||
@@ -3229,6 +3341,8 @@ bool WiFiScan::shutdownBLE() {
 
 // Function to stop all wifi scans
 void WiFiScan::StopScan(uint8_t scan_mode) {
+  const bool stopping_ble_capture =
+      currentScanMode == BT_SCAN_ADVERTISEMENT_CAPTURE;
   #ifdef MARAUDER_MINI_V3
     const bool stopping_ssid_finder =
         currentScanMode == WIFI_SCAN_SSID_FINDER;
@@ -3367,6 +3481,7 @@ void WiFiScan::StopScan(uint8_t scan_mode) {
 
 
   if ((currentScanMode == BT_SCAN_ALL) ||
+  (currentScanMode == BT_SCAN_ADVERTISEMENT_CAPTURE) ||
   (currentScanMode == BT_SCAN_FOX_HUNT) ||
   (currentScanMode == BT_SCAN_RAYBAN) ||
   (currentScanMode == BT_SCAN_AIRTAG) ||
@@ -3409,6 +3524,13 @@ void WiFiScan::StopScan(uint8_t scan_mode) {
       this->shutdownBLE();
       this->ble_scanning = false;
     #endif
+  }
+
+  if (stopping_ble_capture) {
+    this->ble_advert_capture = false;
+    buffer_obj.save();
+    Serial.println(String(F("BLE advertisement capture saved to ")) +
+                   buffer_obj.getFileName());
   }
 
   #ifdef HAS_SCREEN
@@ -3476,6 +3598,70 @@ bool WiFiScan::mac_cmp(uint8_t addr1[6], uint8_t addr2[6]) {
           out[i] = bytes[i];
       }
   }
+#endif
+
+bool WiFiScan::startBLEAdvertisementCapture() {
+  #if defined(HAS_SD) && defined(HAS_NIMBLE_2)
+    if (!sd_obj.supported) {
+      Serial.println(F("BLE capture requires a mounted SD card"));
+      return false;
+    }
+    ble_advert_capture = true;
+    buffer_obj.logOpen("ble_advertisements", &SD, false, true);
+    buffer_obj.append(F("time_ms,rssi,address,address_type,connectable,scannable,adv_length,advertisement_hex,scan_response_hex,service_uuids\n"));
+    this->StartScan(BT_SCAN_ADVERTISEMENT_CAPTURE, TFT_GREEN);
+    return true;
+  #else
+    Serial.println(F("BLE advertisement capture is unavailable on this target"));
+    return false;
+  #endif
+}
+
+#ifdef HAS_NIMBLE_2
+void WiFiScan::captureBLEAdvertisement(
+    const NimBLEAdvertisedDevice* advertisedDevice) {
+  if (!ble_advert_capture || advertisedDevice == nullptr)
+    return;
+
+  const std::vector<uint8_t>& payload = advertisedDevice->getPayload();
+  const size_t advertisementLength = min(
+      static_cast<size_t>(advertisedDevice->getAdvLength()), payload.size());
+  String line;
+  line.reserve(160 + payload.size() * 2);
+  line += millis();
+  line += ',';
+  line += advertisedDevice->getRSSI();
+  line += ',';
+  line += advertisedDevice->getAddress().toString().c_str();
+  line += ',';
+  line += advertisedDevice->getAddressType();
+  line += ',';
+  line += advertisedDevice->isConnectable() ? '1' : '0';
+  line += ',';
+  line += advertisedDevice->isScannable() ? '1' : '0';
+  line += ',';
+  line += advertisementLength;
+  line += ',';
+
+  char byteText[3];
+  for (size_t index = 0; index < advertisementLength; index++) {
+    snprintf(byteText, sizeof(byteText), "%02X", payload[index]);
+    line += byteText;
+  }
+  line += ',';
+  for (size_t index = advertisementLength; index < payload.size(); index++) {
+    snprintf(byteText, sizeof(byteText), "%02X", payload[index]);
+    line += byteText;
+  }
+  line += ',';
+  for (uint8_t index = 0;
+       index < advertisedDevice->getServiceUUIDCount(); index++) {
+    if (index) line += ';';
+    line += advertisedDevice->getServiceUUID(index).toString().c_str();
+  }
+  line += '\n';
+  buffer_obj.append(line);
+}
 #endif
 
 bool WiFiScan::seen_mac(unsigned char* mac, bool simple) {
@@ -7152,6 +7338,9 @@ void WiFiScan::RunSwiftpairSpam(uint8_t scan_mode, uint16_t color) {
 // Function to start running any BLE scan
 void WiFiScan::RunBluetoothScan(uint8_t scan_mode, uint16_t color) {
   #ifdef HAS_BT
+    if (scan_mode != BT_SCAN_ADVERTISEMENT_CAPTURE)
+      this->ble_advert_capture = false;
+
     #ifdef HAS_SCREEN
       display_obj.print_delay_1 = 50;
       display_obj.print_delay_2 = 20;
@@ -7174,6 +7363,7 @@ void WiFiScan::RunBluetoothScan(uint8_t scan_mode, uint16_t color) {
     NimBLEDevice::init("");
     pBLEScan = NimBLEDevice::getScan(); //create new scan
     if ((scan_mode == BT_SCAN_ALL) ||
+        (scan_mode == BT_SCAN_ADVERTISEMENT_CAPTURE) ||
         (scan_mode == BT_SCAN_FOX_HUNT) ||
         (scan_mode == BT_SCAN_RAYBAN) ||
         (scan_mode == BT_SCAN_AIRTAG) ||
@@ -7190,6 +7380,8 @@ void WiFiScan::RunBluetoothScan(uint8_t scan_mode, uint16_t color) {
           display_obj.tft.fillRect(0,16,TFT_WIDTH,16, color);
           if (scan_mode == BT_SCAN_ALL)
             display_obj.tft.drawCentreString(text_table4[41],TFT_WIDTH / 2,16,2);
+          else if (scan_mode == BT_SCAN_ADVERTISEMENT_CAPTURE)
+            display_obj.tft.drawCentreString("BLE SD Capture",TFT_WIDTH / 2,16,2);
           else if (scan_mode == BT_SCAN_FOX_HUNT)
             display_obj.tft.drawCentreString("Fox Hunt",TFT_WIDTH / 2,16,2);
           else if (scan_mode == BT_SCAN_AIRTAG)
@@ -7213,7 +7405,8 @@ void WiFiScan::RunBluetoothScan(uint8_t scan_mode, uint16_t color) {
         #endif
         display_obj.tft.setTextColor(TFT_CYAN, TFT_BLACK);
       #endif
-      if (scan_mode == BT_SCAN_ALL) {
+      if ((scan_mode == BT_SCAN_ALL) ||
+          (scan_mode == BT_SCAN_ADVERTISEMENT_CAPTURE)) {
         this->clearList(CLEAR_BLE);
         #ifndef HAS_NIMBLE_2
           pBLEScan->setAdvertisedDeviceCallbacks(new bluetoothScanAllCallback(), true);

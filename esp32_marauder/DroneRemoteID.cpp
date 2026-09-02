@@ -86,6 +86,8 @@ struct Drone {
   uint8_t status;
   uint8_t messagesSeen;
   uint8_t methods;
+  uint8_t rawMessageMask;
+  uint8_t rawMessages[CAPTURED_MESSAGE_TYPES][CAPTURED_MESSAGE_SIZE];
 };
 
 Drone results[MAX_RESULTS]{};
@@ -231,6 +233,11 @@ void decodeMessage(const char* address, int8_t rssi, uint8_t channel,
   if (!drone) {
     portEXIT_CRITICAL(&resultMux);
     return;
+  }
+
+  if (type < CAPTURED_MESSAGE_TYPES) {
+    memcpy(drone->rawMessages[type], message, CAPTURED_MESSAGE_SIZE);
+    drone->rawMessageMask |= 1 << type;
   }
 
   switch (type) {
@@ -576,6 +583,82 @@ void showError(const char* message) {
 
 }  // namespace
 
+bool selectCapturedForSpoof(CapturedDrone& target) {
+  releaseControls();
+  Drone snapshot[MAX_RESULTS]{};
+  const uint8_t count = copyResults(snapshot);
+  if (count == 0) {
+    showError("No captured drones. Run Drone Remote ID first.");
+    while (!c_btn.justPressed() && !l_btn.justPressed())
+      delay(5);
+    releaseControls();
+    return false;
+  }
+
+  uint8_t selected = 0;
+  bool redraw = true;
+  while (true) {
+    if (l_btn.justPressed()) {
+      releaseControls();
+      return false;
+    }
+    if (u_btn.justPressed() && selected > 0) {
+      selected--;
+      redraw = true;
+    }
+    if (d_btn.justPressed() && selected + 1 < count) {
+      selected++;
+      redraw = true;
+    }
+    if (c_btn.justPressed()) {
+      const Drone& source = snapshot[selected];
+      memset(&target, 0, sizeof(target));
+      strlcpy(target.address, source.address, sizeof(target.address));
+      strlcpy(target.id, source.id, sizeof(target.id));
+      memcpy(target.messages, source.rawMessages, sizeof(target.messages));
+      target.lastSeen = source.lastSeen;
+      target.rssi = source.rssi;
+      target.channel = source.channel;
+      target.methods = source.methods;
+      target.messageMask = source.rawMessageMask;
+      releaseControls();
+      return target.messageMask != 0;
+    }
+
+    if (redraw) {
+      display_obj.tft.fillScreen(TFT_BLACK);
+      MiniV3Ui::header(display_obj.tft, "SELECT DRONE",
+                       "AUTHORIZED LAB REPLAY", TFT_RED);
+      display_obj.tft.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
+      display_obj.tft.drawString(String("Captured ") + count, 4, 33, 1);
+      const uint8_t start = selected >= VISIBLE_ROWS
+          ? selected - VISIBLE_ROWS + 1 : 0;
+      for (uint8_t row = 0; row < VISIBLE_ROWS; row++) {
+        const uint8_t index = start + row;
+        if (index >= count)
+          break;
+        const int16_t y = ROW_START_Y + row * ROW_HEIGHT;
+        const bool highlighted = index == selected;
+        const uint16_t background = highlighted ? TFT_RED : TFT_BLACK;
+        const uint16_t foreground = highlighted ? TFT_WHITE : TFT_ORANGE;
+        const char method = snapshot[index].methods ==
+            (METHOD_WIFI | METHOD_BLE) ? '+' :
+            (snapshot[index].methods & METHOD_WIFI ? 'W' : 'B');
+        display_obj.tft.fillRect(0, y, TFT_WIDTH, ROW_HEIGHT - 1, background);
+        display_obj.tft.setTextColor(foreground, background);
+        display_obj.tft.setViewport(2, y, TFT_WIDTH - 4, ROW_HEIGHT - 1);
+        display_obj.tft.setCursor(0, 2);
+        display_obj.tft.printf("%c %d %s", method, snapshot[index].rssi,
+                               snapshot[index].id);
+        display_obj.tft.resetViewport();
+      }
+      MiniV3Ui::footer(display_obj.tft, "C SELECT  L CANCEL", TFT_ORANGE);
+      redraw = false;
+    }
+    delay(5);
+  }
+}
+
 void run() {
   releaseControls();
   resetResults();
@@ -702,6 +785,7 @@ void run() {
 
 namespace DroneRemoteID {
 void run() {}
+bool selectCapturedForSpoof(CapturedDrone&) { return false; }
 }
 
 #endif

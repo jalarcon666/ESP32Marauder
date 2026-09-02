@@ -167,6 +167,7 @@
 #define BT_SCAN_FOX_HUNT 84
 #define BT_FINDMY_SOUND 85
 #define BT_ATTACK_FINDMY_LIVE 86
+#define BT_SCAN_ADVERTISEMENT_CAPTURE 87
 #define WIFI_ATTACK_CAMERA_DEAUTH 88
 #define WIFI_ATTACK_SSID_GROUP_CLONE 89
 #define WIFI_SCAN_SSID_FINDER 90
@@ -348,8 +349,21 @@ struct Flipper {
 struct BleDevice {
   uint8_t  mac[6];
   String   name;
+  String   advertisedServices;
   bool     selected = false;
   int      rssi     = -128;
+  uint8_t  addressType = 0;
+  uint16_t companyId = 0;
+  uint16_t appearance = 0;
+  bool     hasCompanyId = false;
+  bool     hasAppearance = false;
+  bool     connectable = true;
+  bool     scannable = false;
+  uint8_t  advertisementData[31] = {};
+  uint8_t  advertisementLength = 0;
+  uint8_t  scanResponseData[31] = {};
+  uint8_t  scanResponseLength = 0;
+  bool     advertisementTruncated = false;
 };
 
 #ifdef HAS_PSRAM
@@ -420,6 +434,7 @@ class WiFiScan
     uint32_t deauth_tx_failed = 0;
     esp_err_t deauth_last_error = ESP_OK;
     bool run_setup = true;
+    bool ble_advert_capture = false;
     #ifdef MARAUDER_MINI_V3
       WiFiCameraDetector::DeauthTarget camera_deauth_targets{};
       uint8_t camera_deauth_cursor = 0;
@@ -1099,6 +1114,11 @@ class WiFiScan
     int generateSSIDs(int count = 20);
     bool shutdownWiFi();
     bool shutdownBLE();
+    bool startBLEAdvertisementCapture();
+    #ifdef HAS_NIMBLE_2
+      void captureBLEAdvertisement(
+          const NimBLEAdvertisedDevice* advertisedDevice);
+    #endif
     bool scanning();
     bool joinWiFi(String ssid, String password, bool gui = true);
     void getMAC(bool get_sta, uint8_t* mac);

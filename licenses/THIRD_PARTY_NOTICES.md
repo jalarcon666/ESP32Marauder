@@ -32,8 +32,9 @@ SOFTWARE.
 
 ## opendroneid-core-c
 
-The passive Open Drone ID decoder in
-`esp32_marauder/DroneRemoteID.cpp` is derived from
+The Open Drone ID decoder in `esp32_marauder/DroneRemoteID.cpp` and message
+encoder/bounded broadcaster in `esp32_marauder/DroneRemoteIDSpoofer.cpp` are
+derived from
 [opendroneid-core-c](https://github.com/opendroneid/opendroneid-core-c) and
 modifications made by nyanBOX. The upstream library is licensed under the
 Apache License, Version 2.0. A copy of the license is available at
@@ -41,5 +42,6 @@ Apache License, Version 2.0. A copy of the license is available at
 
 The Marauder adaptation adds fixed-memory storage, strict transport bounds,
 NimBLE-Arduino 2.x integration, ESP32-C5 Wi-Fi/BLE coexistence, channel
-hopping, and a 128x128 joystick-driven display. This fork includes only the
-passive receiver and decoder; it does not include Remote ID replay or spoofing.
+hopping, and a 128x128 joystick-driven display. The active broadcaster is kept
+separate from the passive receiver and requires an explicit authorized-lab
+confirmation in the device menu.

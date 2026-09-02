@@ -232,6 +232,9 @@ class MenuFunctions
     // Bluetooth menu stuff
     Menu bluetoothSnifferMenu;
     Menu bluetoothAttackMenu;
+    Menu bleSecurityMenu;
+    Menu bleTargetMenu;
+    Menu bleConfirmMenu;
 
     // Settings things menus
     Menu generateSSIDsMenu;
