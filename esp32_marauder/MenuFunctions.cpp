@@ -8,6 +8,16 @@
 #include "DroneRemoteID.h"
 #include "DroneRemoteIDSpoofer.h"
 #include "BLESecurityTools.h"
+#include "SnakeGame.h"
+#include "PongGame.h"
+#include "ConnectFourGame.h"
+#include "BreakoutGame.h"
+#include "TetrisGame.h"
+#include "SpaceInvadersGame.h"
+#include "MissileCommandGame.h"
+#include "EightBallGame.h"
+#include "FiveCardDrawGame.h"
+#include "BlackjackGame.h"
 
 #ifdef HAS_SCREEN
 
@@ -2559,6 +2569,9 @@ void MenuFunctions::RunSetup()
   bluetoothMenu.list = new LinkedList<MenuNode>(); // Get list in third menu ready
 #endif
   deviceMenu.list = new LinkedList<MenuNode>();
+  #ifdef MARAUDER_MINI_V3
+    gamesMenu.list = new LinkedList<MenuNode>();
+  #endif
   #ifdef HAS_GPS
     if (expose_gps_features) {
       gpsMenu.list = new LinkedList<MenuNode>();
@@ -2640,6 +2653,9 @@ void MenuFunctions::RunSetup()
   mainMenu.name = text_table1[6];
   wifiMenu.name = text_table1[7];
   deviceMenu.name = text_table1[9];
+  #ifdef MARAUDER_MINI_V3
+    gamesMenu.name = "Games";
+  #endif
   failedUpdateMenu.name = text_table1[11];
   confirmMenu.name = text_table1[13];
   updateMenu.name = text_table1[15];
@@ -2721,12 +2737,64 @@ void MenuFunctions::RunSetup()
     	});
 	}
   #endif
+  #ifdef MARAUDER_MINI_V3
+    this->addNodes(&mainMenu, "Games", TFTGREEN, GENERAL_APPS, [this]() {
+      this->changeMenu(&gamesMenu, true);
+    });
+  #endif
   this->addNodes(&mainMenu, text_table1[9], TFTBLUE, DEVICE, [this]() {
     this->changeMenu(&deviceMenu, true);
   });
   this->addNodes(&mainMenu, text_table1[30], TFTLIGHTGREY, REBOOT, []() {
     ESP.restart();
   });
+
+  #ifdef MARAUDER_MINI_V3
+    gamesMenu.parentMenu = &mainMenu;
+    this->addNodes(&gamesMenu, text09, TFTLIGHTGREY, 0, [this]() {
+      this->changeMenu(gamesMenu.parentMenu, true);
+    });
+    this->addNodes(&gamesMenu, "Snake", TFTGREEN, GENERAL_APPS, [this]() {
+      SnakeGame::run();
+      this->changeMenu(&gamesMenu, true);
+    });
+    this->addNodes(&gamesMenu, "Pong", TFTCYAN, GENERAL_APPS, [this]() {
+      PongGame::run();
+      this->changeMenu(&gamesMenu, true);
+    });
+    this->addNodes(&gamesMenu, "Connect 4", TFTYELLOW, GENERAL_APPS, [this]() {
+      ConnectFourGame::run();
+      this->changeMenu(&gamesMenu, true);
+    });
+    this->addNodes(&gamesMenu, "Breakout", TFTORANGE, GENERAL_APPS, [this]() {
+      BreakoutGame::run();
+      this->changeMenu(&gamesMenu, true);
+    });
+    this->addNodes(&gamesMenu, "Tetris", TFTCYAN, GENERAL_APPS, [this]() {
+      TetrisGame::run();
+      this->changeMenu(&gamesMenu, true);
+    });
+    this->addNodes(&gamesMenu, "Space Invaders", TFTGREEN, GENERAL_APPS, [this]() {
+      SpaceInvadersGame::run();
+      this->changeMenu(&gamesMenu, true);
+    });
+    this->addNodes(&gamesMenu, "Missile Command", TFTRED, GENERAL_APPS, [this]() {
+      MissileCommandGame::run();
+      this->changeMenu(&gamesMenu, true);
+    });
+    this->addNodes(&gamesMenu, "8 Ball Billiards", TFTGREEN, GENERAL_APPS, [this]() {
+      EightBallGame::run();
+      this->changeMenu(&gamesMenu, true);
+    });
+    this->addNodes(&gamesMenu, "5 Card Draw", TFTYELLOW, GENERAL_APPS, [this]() {
+      FiveCardDrawGame::run();
+      this->changeMenu(&gamesMenu, true);
+    });
+    this->addNodes(&gamesMenu, "Blackjack", TFTORANGE, GENERAL_APPS, [this]() {
+      BlackjackGame::run();
+      this->changeMenu(&gamesMenu, true);
+    });
+  #endif
 
   // Build WiFi Menu
   wifiMenu.parentMenu = &mainMenu; // Main Menu is second menu parent

@@ -187,6 +187,9 @@ class MenuFunctions
     #ifdef HAS_GPS
       Menu gpsMenu;   // H4W9 Added GPS Menu option to Main Menu
     #endif
+    #ifdef MARAUDER_MINI_V3
+      Menu gamesMenu;
+    #endif
     Menu badusbMenu;
     Menu deviceMenu;
 
