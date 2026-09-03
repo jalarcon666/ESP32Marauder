@@ -4,6 +4,12 @@
 
   #define configs_h
 
+  // The Eternal Mini V3 profile is ESP32-C5-only. Other fork targets remain
+  // available and select their own profile through the build flag.
+  #if defined(MARAUDER_MINI_V3) && !defined(ARDUINO_ESP32C5_DEV)
+    #error "MARAUDER_MINI_V3 requires the ESP32-C5 board target"
+  #endif
+
   #define POLISH_POTATO
 
   //#define DEVELOPER
@@ -40,19 +46,15 @@
   //#define DUAL_MINI_C5
   //// END BOARD TARGETS
 
-  #if defined(MARAUDER_MINI_V3) && !defined(ARDUINO_ESP32C5_DEV)
-    #error "MARAUDER_MINI_V3 requires the ESP32-C5 board target"
-  #endif
-
   #define JSON_SETTING_SIZE 2048
 
-#define MARAUDER_VERSION "v1.15.1"
-
-#ifdef MARAUDER_MINI_V3
-  #define MARAUDER_PARTITION_LAYOUT "mini-v3-c5-8m-ota-v1"
-#else
-  #define MARAUDER_PARTITION_LAYOUT "legacy"
-#endif
+  #define MARAUDER_NAME "Marauder Eternal"
+  #define MARAUDER_VERSION "v1.15.5"
+  #ifdef MARAUDER_MINI_V3
+    #define MARAUDER_PARTITION_LAYOUT "mini-v3-c5-8m-ota-v1"
+  #else
+    #define MARAUDER_PARTITION_LAYOUT "legacy"
+  #endif
 
   #define GRAPH_REFRESH   100
 
@@ -2145,8 +2147,8 @@
       //#define MENU_FONT &FreeMonoBold9pt7b
       //#define MENU_FONT &FreeSans9pt7b
       //#define MENU_FONT &FreeSansBold9pt7b
-      // Six 15px rows plus 2px spacing fit below the 20px header on 128x128.
-      // Longer menus page while keeping the selected row inside the viewport.
+      // Six modern menu cards fit the 128x128 Mini V3 display without
+      // sacrificing legibility. Longer menus continue to use paging.
       #define BUTTON_SCREEN_LIMIT 6
       #define BUTTON_ARRAY_LEN BUTTON_SCREEN_LIMIT
       #define STATUS_BAR_WIDTH (TFT_HEIGHT/16)
@@ -2169,7 +2171,7 @@
       #define GREENBUTTON_W (FRAME_W/2)
       #define GREENBUTTON_H FRAME_H
     
-      #define STATUSBAR_COLOR 0x4A49
+      #define STATUSBAR_COLOR 0x18E3
     #endif
 
   #endif
@@ -2591,9 +2593,7 @@
       #define SD_CS 7
     #endif
 
-    #ifdef MARAUDER_MINI_V3
-      #define SD_CS 10
-    #endif
+    // MARAUDER_MINI_V3 defines SD_CS in its authoritative hardware block.
 
   #endif
   //// END SD DEFINITIONS

@@ -18,7 +18,6 @@
 #define BATTERY_ANALOG_ON 0
 
 #include "WiFiScan.h"
-#include "TargetListSort.h"
 #include "BatteryInterface.h"
 #include "SDInterface.h"
 #include "settings.h"
@@ -130,15 +129,18 @@ class MenuFunctions
 {
   private:
 
-    enum class FoxHuntListKind : uint8_t {
-      AP_TARGETS,
-      APS_WITH_STATIONS,
-      STATION_TARGETS,
-      PINEAPPLE_TARGETS,
-      MULTISSID_TARGETS,
-      BLE_TARGETS,
-      FINDMY_TARGETS,
-      FLIPPER_TARGETS,
+    enum class SSIDMenuMode : uint8_t {
+      Selection,
+      Deauth,
+      FoxHunt,
+      Finder,
+      EvilPortal,
+      EvilPortalAuto
+    };
+
+    enum class StationMenuMode : uint8_t {
+      Selection,
+      Deauth
     };
 
     String u_result = "";
@@ -150,6 +152,8 @@ class MenuFunctions
     uint8_t mini_kb_index = 0;
     uint8_t old_gps_sat_count = 0;
     uint8_t max_graph_value = 0;
+    bool ap_deauth_start_pending = false;
+    bool station_deauth_start_pending = false;
 
     #ifdef HAS_MINI_SCREEN
       Menu* mini_marquee_menu = nullptr;
@@ -163,21 +167,6 @@ class MenuFunctions
       bool mini_menu_repeat_enabled = false;
       uint32_t mini_menu_repeat_next_step = 0;
     #endif
-
-    void buildWiFiFoxHuntMenu();
-    void buildBluetoothFoxHuntMenu();
-    void buildFoxTargetList(FoxHuntListKind type, int context_ap = -1);
-    void buildFoxSortMenu();
-    void buildFoxFilterMenu();
-    const char* foxSortLabel() const;
-    const char* foxFilterLabel() const;
-    bool foxListSupportsRecent() const;
-    bool foxListSupportsBand() const;
-
-    FoxHuntListKind fox_target_list = FoxHuntListKind::AP_TARGETS;
-    int fox_target_context_ap = -1;
-    TargetSortMode fox_sort_mode = TargetSortMode::SIGNAL_DESC;
-    TargetFilterMode fox_filter_mode = TargetFilterMode::ALL;
 
     // Main menu stuff
     Menu mainMenu;
@@ -214,6 +203,8 @@ class MenuFunctions
     Menu wifiAPMenu;
     Menu ssidGroupMenu;
     Menu ssidAPMenu;
+    Menu stationSSIDMenu;
+    Menu stationListMenu;
     Menu wifiIPMenu;
     Menu ssidsMenu;
     //#ifdef HAS_BT
@@ -237,16 +228,18 @@ class MenuFunctions
     Menu bluetoothAttackMenu;
     Menu bleSecurityMenu;
     Menu bleTargetMenu;
+    Menu bleTargetDetailsMenu;
     Menu bleConfirmMenu;
 
     // Settings things menus
     Menu generateSSIDsMenu;
 
     Menu evilPortalMenu;
+    Menu evilPortalActionMenu;
+    Menu evilPortalCredentialsMenu;
+    String selectedEvilPortalSSID = "";
 
     Menu foxHuntMenu;
-    Menu foxSortMenu;
-    Menu foxFilterMenu;
 
     #ifdef HAS_DIRECT_UPLOAD
       Menu deleteAllMenu;
@@ -276,12 +269,31 @@ class MenuFunctions
     void drawGraph(int16_t *values);
     void drawGraphSmall(uint8_t *values);
     void renderGraphUI(uint8_t scan_mode = 0);
-    void addNodes(Menu* menu, const char* name, uint8_t color, int place, std::function<void()> callable, bool selected = false);
+    void addNodes(Menu* menu, const char* name, uint8_t color, uint8_t place, std::function<void()> callable, bool selected = false);
+    void confirmAction(const char* title, Menu* returnMenu,
+                       std::function<void()> action);
+    void confirmBLEAction(const char* title, std::function<void()> action);
+    void showBLETargetDetails(int index, Menu* returnMenu, bool startFoxHunt);
+    void buildEvilPortalActionMenu(const String& ssid);
+    void buildEvilPortalCredentialsMenu();
+    void buildSSIDGroupMenu(SSIDMenuMode mode = SSIDMenuMode::Selection);
+    void buildSSIDAPMenu(const String& group_name,
+                         SSIDMenuMode mode = SSIDMenuMode::Selection);
+    void buildStationSSIDMenu(
+        StationMenuMode mode = StationMenuMode::Selection);
+    void buildSSIDStationMenu(
+        const String& group_name,
+        StationMenuMode mode = StationMenuMode::Selection);
+    uint16_t prepareSelectedStationTargets();
+    void releaseTransientWiFiSelectorMenus(const char* owner);
+    void clearAccessPointSelections();
+    bool startEvilPortalForSSIDGroup(const String& group_name);
+    bool startAutoEvilPortalForSSIDGroup(const String& group_name);
     #ifdef MARAUDER_MINI_V3
-      void buildSSIDGroupMenu(bool fox_hunt_mode = false,
-                              bool finder_mode = false);
-      void buildSSIDAPMenu(const String& group_name,
-                           bool fox_hunt_mode = false);
+      void showMiniMenuError(const char* message, Menu* return_menu,
+                             uint16_t return_index,
+                             const char* title = "FOX HUNT");
+      void clockMode();
     #endif
     void battery(bool initial = false);
     void battery2(bool initial = false);
@@ -315,7 +327,7 @@ class MenuFunctions
     Menu* current_menu;
     Menu clearSSIDsMenu;
     Menu clearAPsMenu;
-    
+
     // Save Files Menu
     Menu saveSSIDsMenu;
     Menu loadSSIDsMenu;
@@ -331,7 +343,6 @@ class MenuFunctions
     #endif
 
     Menu infoMenu;
-    Menu apInfoMenu;
 
     #ifdef HAS_DIRECT_UPLOAD
       Menu uploadLogsMenu;
@@ -350,9 +361,12 @@ class MenuFunctions
     void setGraphScale(float scale);
     void updateStatusBar();
     void buildButtons(Menu* menu, int starting_index = 0, const char* button_name = nullptr);
-    void changeMenu(Menu* menu, bool simple_change = false);
+    void changeMenu(Menu* menu, bool simple_change = false, uint16_t initial_selection = 0);
     void drawStatusBar();
     void displayCurrentMenu(int start_index = 0);
+    #ifdef MARAUDER_MINI_V3
+      bool renderCurrentMenu(TFT_eSPI& target);
+    #endif
     #if !defined(HAS_MINI_SCREEN) || defined(MARAUDER_MINI_V3)
       void brightnessMode();
     #endif
@@ -364,5 +378,3 @@ class MenuFunctions
 
 #endif
 #endif
-
-

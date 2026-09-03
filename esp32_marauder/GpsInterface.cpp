@@ -1,153 +1,58 @@
 #include "GpsInterface.h"
+#include "DeviceClock.h"
 
 #ifdef HAS_GPS
 
 extern GpsInterface gps_obj;
+extern DeviceClock device_clock_obj;
 
 char nmeaBuffer[100];
 
 MicroNMEA nmea(nmeaBuffer, sizeof(nmeaBuffer));
 
+// Use a uniquely named UART object. The Arduino core already defines Serial2,
+// and constructing another object with that symbol corrupts startup state.
 static HardwareSerial gpsSerial(GPS_SERIAL_INDEX);
 
-#ifdef MARAUDER_MINI_V3
-  static const uint32_t GPS_BAUD_RATES[] = {
-      115200, 9600, 38400, 57600, 19200, 4800};
-  static const uint8_t GPS_BAUD_RATE_COUNT =
-      sizeof(GPS_BAUD_RATES) / sizeof(GPS_BAUD_RATES[0]);
-  static const uint32_t RECOVERY_BAUD_DWELL_MS = 1800;
-  static const uint32_t GPS_TRAFFIC_TIMEOUT_MS = 6000;
-  static const uint32_t GPS_FIX_TIMEOUT_MS = 3500;
-#else
-  static const char *PCAS_SET_115200 = "$PCAS01,5*19\r\n";
-  static const uint32_t PROBE_MS = 1200;
-#endif
+static const uint32_t GPS_BAUD_RATES[] = {
+    115200, 9600, 38400, 57600, 19200, 4800};
+static const uint8_t GPS_BAUD_RATE_COUNT =
+    sizeof(GPS_BAUD_RATES) / sizeof(GPS_BAUD_RATES[0]);
+static const uint32_t RECOVERY_BAUD_DWELL_MS = 1800;
+static const uint32_t GPS_TRAFFIC_TIMEOUT_MS = 6000;
+static const uint32_t GPS_FIX_TIMEOUT_MS = 3500;
 
 void GpsInterface::begin() {
-  #ifdef MARAUDER_MINI_V3
-    this->gps_enabled = false;
-    this->good_fix = false;
-    this->gps_baud = 0;
-    this->listening_baud = 0;
-    this->last_sentence_ms = 0;
-    this->last_fix_sentence_ms = 0;
-    this->last_baud_switch_ms = 0;
-    this->recovery_baud_index = 1; // Start with the common 9600 baud rate.
-    this->type_flag = GPSTYPE_NATIVE;
-    this->disable_queue();
-    nmea.setUnknownSentenceHandler(gps_nmea_notimp);
-    this->listenAtBaud(GPS_BAUD_RATES[this->recovery_baud_index]);
-    Serial.println(F("GPS: searching for checksum-valid NMEA"));
-  #else
-    gpsSerial.begin(9600, SERIAL_8N1, GPS_TX, GPS_RX);
+  this->gps_enabled = false;
+  this->good_fix = false;
+  this->gps_baud = 0;
+  this->listening_baud = 0;
+  this->last_sentence_ms = 0;
+  this->last_fix_sentence_ms = 0;
+  this->last_baud_switch_ms = 0;
+  this->recovery_baud_index = 0;
+  this->type_flag = GPSTYPE_NATIVE;
+  this->disable_queue();
+  nmea.setUnknownSentenceHandler(gps_nmea_notimp);
 
-    uint32_t gps_baud = this->initGpsBaudAndForce115200();
-
-    if ((gps_baud != 9600) && (gps_baud != 38400) && (gps_baud != 115200))
-      Serial.println(F("Could not detect GPS baudrate"));
-
-    delay(1000);
-
-    MicroNMEA::sendSentence(gpsSerial, "$PSTMSETPAR,1201,0x00000042");
-    MicroNMEA::sendSentence(gpsSerial, "$PSTMSAVEPAR");
-
-    MicroNMEA::sendSentence(gpsSerial, "$PSTMSRR");
-
-    delay(1000);
-
-    if (gpsSerial.available()) {
-      this->gps_enabled = true;
-      while (gpsSerial.available()) {
-        char c = gpsSerial.read();
-        nmea.process(c);
-      }
-    }
-    else {
-      this->gps_enabled = false;
-      Serial.println(F("GPS Not Found"));
-    }
-
-    this->type_flag=GPSTYPE_NATIVE;
-    this->disable_queue();
-    nmea.setUnknownSentenceHandler(gps_nmea_notimp);
-  #endif
+  // Start at the most common receiver baud and rotate in main(). Probing every
+  // baud synchronously delayed boot by more than seven seconds when GPS was
+  // absent or still cold-starting.
+  this->recovery_baud_index = 1;
+  this->listenAtBaud(GPS_BAUD_RATES[this->recovery_baud_index]);
+  Serial.println(F("GPS: listening for checksum-valid NMEA without blocking boot"));
 }
 
-#ifdef MARAUDER_MINI_V3
 void GpsInterface::listenAtBaud(uint32_t baud) {
   gpsSerial.end();
+
+  // Arduino HardwareSerial takes ESP RX first and ESP TX second. The board
+  // constants are named for the GPS module pins: GPS_TX feeds ESP RX.
   gpsSerial.begin(baud, SERIAL_8N1, GPS_TX, GPS_RX);
   nmea.setBuffer(nmeaBuffer, sizeof(nmeaBuffer));
   this->listening_baud = baud;
   this->last_baud_switch_ms = millis();
 }
-#else
-
-bool GpsInterface::probeBaud(uint32_t baud) {
-  gpsSerial.end();
-  delay(50);
-
-  gpsSerial.begin(baud, SERIAL_8N1, GPS_TX, GPS_RX);
-
-  uint32_t start = millis();
-  bool sawDollar = false;
-  bool parsedSentence = false;
-
-  while (millis() - start < PROBE_MS) {
-    while (gpsSerial.available()) {
-      char c = (char)gpsSerial.read();
-
-      if (c == '$') {
-        sawDollar = true;
-      }
-
-      // Feed characters directly to MicroNMEA
-      if (nmea.process(c)) {
-        parsedSentence = true;
-      }
-
-      // If we’ve seen real NMEA traffic and MicroNMEA parsed something,
-      // this baud is almost certainly correct
-      if (sawDollar && parsedSentence) {
-        return true;
-      }
-    }
-    delay(1);
-  }
-
-  return false;
-}
-
-void GpsInterface::setGpsTo115200From9600() {
-  gpsSerial.print(PCAS_SET_115200);
-  gpsSerial.flush();
-  delay(200);
-}
-
-uint32_t GpsInterface::initGpsBaudAndForce115200() {
-  if (probeBaud(115200)) {
-    return 115200;
-  }
-
-  if (probeBaud(9600)) {
-    setGpsTo115200From9600();
-
-    if (probeBaud(115200)) {
-      return 115200;
-    }
-
-    probeBaud(9600);
-    return 9600;
-  }
-
-  if (probeBaud(38400)) {
-    return 38400;
-  }
-
-  probeBaud(9600);
-  return 0;
-}
-#endif
 
 //passthrough for other objects
 void gps_nmea_notimp(MicroNMEA& nmea){
@@ -180,17 +85,9 @@ void GpsInterface::enqueue(MicroNMEA& nmea){
 
             if(tot_brk!=std::string::npos && num_brk!=std::string::npos && txt_brk!=std::string::npos && chk_brk!=std::string::npos
                 && chk_brk>txt_brk && txt_brk>num_brk && num_brk>tot_brk && tot_brk>=0){
-              std::string total_str=content.substr(0,tot_brk);
-              std::string num_str=content.substr(tot_brk+1,num_brk-tot_brk-1);
               std::string type_str=content.substr(num_brk+1,txt_brk-num_brk-1);
               std::string text_str=content.substr(txt_brk+1,chk_brk-txt_brk-1);
               std::string checksum=content.substr(chk_brk+1,std::string::npos);
-
-              int total=0;
-              if(total_str.length()) total=atoi(total_str.c_str());
-
-              int num=0;
-              if(num_str.length()) num=atoi(num_str.c_str());
 
               int type=0;
               if(type_str.length()) type=atoi(type_str.c_str());
@@ -198,97 +95,24 @@ void GpsInterface::enqueue(MicroNMEA& nmea){
               if(text_str.length() && checksum.length()){
                 String text=text_str.c_str();
                 if(type>1){
-                  char type_cstr[4];
-                  snprintf(type_cstr, 4, "%02d ", type);
-                  type_cstr[3]='\0';
+                  char type_cstr[16];
+                  snprintf(type_cstr, sizeof(type_cstr), "%02d ", type);
                   text=type_cstr+text;
                 }
 
-                if((num<=1||total<=1) && this->queue_enabled_flag){
-                  if(this->text){
-                    if(this->text_in){
-                      int size=text_in->size();
-                      if(size){
-                        #ifdef GPS_TEXT_MAXCYCLES
-                          if(this->text_cycles>=GPS_TEXT_MAXCYCLES){
-                        #else
-                          if(this->text_cycles){
-                        #endif
-                            if(this->text->size()){
-                              LinkedList<String> *delme=this->text;
-                              this->text=new LinkedList<String>;
-                              delete delme;
-                              this->text_cycles=0;
-                            }
-                          }
-                        
-                        for(int i=0;i<size;i++){
-                          this->text->add(this->text_in->get(i));
-                        }
-                        LinkedList<String> *delme=this->text_in;
-                        this->text_in=new LinkedList<String>;
-                        delete delme;
-                        this->text_cycles++;
-
-                        this->gps_text=text;
-                      }
-                    }
-                    else
-                      this->text_in=new LinkedList<String>;
-                  }
-                  else{
-                    if(this->text_in){
-                      this->text_cycles=0;
-                      this->text=this->text_in;
-                      if(this->text->size()){
-                        if(this->gps_text=="") this->gps_text=this->text->get(0);
-                        this->text_cycles++;
-                      }
-                      this->text_in=new LinkedList<String>;
-                    }
-                    else {
-                      this->text_cycles=0;
-                      this->text=new LinkedList<String>;
-                      this->text_in=new LinkedList<String>;
-                    }
-                  }
-
-                  this->text_in->add(text);
-                }
-                else if(this->queue_enabled_flag){
-                  if(!this->text_in) this->text_in=new LinkedList<String>;
-                  this->text_in->add(text);
-                  int size=this->text_in->size();
-
+                if(this->queue_enabled_flag){
+                  if(!this->text)
+                    this->text=new LinkedList<String>;
                   #ifdef GPS_TEXT_MAXLINES
-                    if(size>=GPS_TEXT_MAXLINES){
+                    while(this->text->size()>=GPS_TEXT_MAXLINES)
                   #else
-                    if(size>=5){
+                    while(this->text->size()>=5)
                   #endif
-                      #ifdef GPS_TEXT_MAXCYCLES
-                        if(this->text_cycles>=GPS_TEXT_MAXCYCLES){
-                      #else
-                        if(this->text_cycles){
-                      #endif
-                          if(this->text->size()){
-                            LinkedList<String> *delme=this->text;
-                            this->text=new LinkedList<String>;
-                            delete delme;
-                            this->text_cycles=0;
-                          }
-                        }
-                      
-                        for(int i=0;i<size;i++)
-                          this->text->add(this->text_in->get(i));
-
-                        LinkedList<String> *delme=this->text_in;
-                        this->text_in=new LinkedList<String>;
-                        delete delme;
-                        this->text_cycles++;
-                      }
+                      this->text->shift();
+                  this->text->add(text);
+                  this->text_cycles = 1;
                 }
-                else
-                  if(num<=1||total<=1) this->gps_text=text;
+                this->gps_text=text;
 
                 if(this->gps_text=="") this->gps_text=text;
                 unparsed=0;
@@ -312,7 +136,7 @@ void GpsInterface::enqueue(MicroNMEA& nmea){
           #else
             if(this->queue->size()>=30)
           #endif
-              this->flush_queue();
+              this->queue->shift();
         }
         else
            this->new_queue();
@@ -332,18 +156,14 @@ void GpsInterface::enqueue(MicroNMEA& nmea){
 }
 
 void GpsInterface::enable_queue(){
-  if(this->queue_enabled_flag){
-    if(!this->queue)
-      this->new_queue();
-    if(!this->text)
-      this->text=new LinkedList<String>;
-    if(!this->text_in)
-      this->text_in=new LinkedList<String>;
-  }
-  else {
-    this->flush_queue();
-    this->queue_enabled_flag=1;
-  }
+  if(!this->queue)
+    this->new_queue();
+  if(!this->text)
+    this->text=new LinkedList<String>;
+  if(!this->text_in)
+    this->text_in=new LinkedList<String>;
+  this->flush_queue();
+  this->queue_enabled_flag=1;
 }
 
 void GpsInterface::disable_queue(){
@@ -360,7 +180,8 @@ LinkedList<nmea_sentence_t>* GpsInterface::get_queue(){
 }
 
 void GpsInterface::new_queue(){
-  this->queue=new LinkedList<nmea_sentence_t>;
+  if(!this->queue)
+    this->queue=new LinkedList<nmea_sentence_t>;
 }
 
 void GpsInterface::flush_queue(){
@@ -369,13 +190,8 @@ void GpsInterface::flush_queue(){
 }
 
 void GpsInterface::flush_queue_nmea(){
-  if(this->queue){
-    if(this->queue->size()){
-      LinkedList<nmea_sentence_t> *delme=this->queue;
-      this->new_queue();
-      delete delme;
-    }
-  }
+  if(this->queue)
+    this->queue->clear();
   else
     this->new_queue();
 }
@@ -389,11 +205,7 @@ void GpsInterface::flush_queue_text(){
   this->text_cycles=0;
 
   if(this->text){
-    if(this->text->size()){
-      LinkedList<String> *delme=this->text;
-      this->text=new LinkedList<String>;
-      delete delme;
-    }
+    this->text->clear();
   }
   else
     this->text=new LinkedList<String>;
@@ -401,11 +213,7 @@ void GpsInterface::flush_queue_text(){
 
 void GpsInterface::flush_queue_textin(){
   if(this->text_in){
-    if(this->text_in->size()){
-      LinkedList<String> *delme=this->text_in;
-      this->text_in=new LinkedList<String>;
-      delete delme;
-    }
+    this->text_in->clear();
   }
   else
     this->text_in=new LinkedList<String>;
@@ -443,37 +251,38 @@ void GpsInterface::setType(String t){
 String GpsInterface::generateGXgga(){
   String msg_type="$"+this->generateType()+"GGA,";
 
-  char timeStr[8];
-  snprintf(timeStr, 8, "%02d%02d%02d,", (int)(nmea.getHour()), (int)(nmea.getMinute()), (int)(nmea.getSecond()));
+  char timeStr[16];
+  snprintf(timeStr, sizeof(timeStr), "%02u%02u%02u,",
+           nmea.getHour(), nmea.getMinute(), nmea.getSecond());
 
   long lat = nmea.getLatitude();
   char latDir = lat < 0 ? 'S' : 'N';
   lat = abs(lat);
-  char latStr[12];
-  snprintf(latStr, 12, "%02ld%08.5f,", lat / 1000000, ((lat % 1000000)*60) / 1000000.0);
+  char latStr[32];
+  snprintf(latStr, sizeof(latStr), "%02ld%08.5f,", lat / 1000000, ((lat % 1000000)*60) / 1000000.0);
 
   long lon = nmea.getLongitude();
   char lonDir = lon < 0 ? 'W' : 'E';
   lon = abs(lon);
-  char lonStr[13];
-  snprintf(lonStr, 13, "%03ld%08.5f,", lon / 1000000, ((lon % 1000000)*60) / 1000000.0);
+  char lonStr[32];
+  snprintf(lonStr, sizeof(lonStr), "%03ld%08.5f,", lon / 1000000, ((lon % 1000000)*60) / 1000000.0);
 
   int fixQuality = nmea.isValid() ? 1 : 0;
-  char fixStr[3];
-  snprintf(fixStr, 3, "%01d,", fixQuality);
+  char fixStr[8];
+  snprintf(fixStr, sizeof(fixStr), "%01d,", fixQuality);
 
   int numSatellites = nmea.getNumSatellites();
-  char satStr[4];
-  snprintf(satStr, 4, "%02d,", numSatellites);
+  char satStr[8];
+  snprintf(satStr, sizeof(satStr), "%02d,", numSatellites);
 
   unsigned long hdop = nmea.getHDOP();
-  char hdopStr[13];
-  snprintf(hdopStr, 13, "%01.2f,", 2.5 * (((float)(hdop))/10));
+  char hdopStr[24];
+  snprintf(hdopStr, sizeof(hdopStr), "%01.2f,", 2.5 * (((float)(hdop))/10));
 
   long altitude;
   if(!nmea.getAltitude(altitude)) altitude=0;
-  char altStr[9];
-  snprintf(altStr, 9, "%01.1f,", altitude/1000.0);
+  char altStr[24];
+  snprintf(altStr, sizeof(altStr), "%01.1f,", altitude/1000.0);
 
   String message = msg_type + timeStr + latStr + latDir + ',' + lonStr + lonDir +
                     ',' + fixStr + satStr + hdopStr + altStr + "M,,M,,";
@@ -484,11 +293,14 @@ String GpsInterface::generateGXgga(){
 String GpsInterface::generateGXrmc(){
   String msg_type="$"+this->generateType()+"RMC,";
 
-  char timeStr[8];
-  snprintf(timeStr, 8, "%02d%02d%02d,", (int)(nmea.getHour()), (int)(nmea.getMinute()), (int)(nmea.getSecond()));
+  char timeStr[16];
+  snprintf(timeStr, sizeof(timeStr), "%02u%02u%02u,",
+           nmea.getHour(), nmea.getMinute(), nmea.getSecond());
 
-  char dateStr[8];
-  snprintf(dateStr, 8, "%02d%02d%02d,", (int)(nmea.getDay()), (int)(nmea.getMonth()), (int)(nmea.getYear()%100));
+  char dateStr[16];
+  snprintf(dateStr, sizeof(dateStr), "%02u%02u%02u,",
+           nmea.getDay(), nmea.getMonth(),
+           static_cast<unsigned int>(nmea.getYear() % 100));
 
   char status = nmea.isValid() ? 'A' : 'V';
   char mode = nmea.isValid() ? 'A' : 'N';
@@ -496,20 +308,20 @@ String GpsInterface::generateGXrmc(){
   long lat = nmea.getLatitude();
   char latDir = lat < 0 ? 'S' : 'N';
   lat = abs(lat);
-  char latStr[12];
-  snprintf(latStr, 12, "%02ld%08.5f,", lat / 1000000, ((lat % 1000000)*60) / 1000000.0);
+  char latStr[32];
+  snprintf(latStr, sizeof(latStr), "%02ld%08.5f,", lat / 1000000, ((lat % 1000000)*60) / 1000000.0);
 
   long lon = nmea.getLongitude();
   char lonDir = lon < 0 ? 'W' : 'E';
   lon = abs(lon);
-  char lonStr[13];
-  snprintf(lonStr, 13, "%03ld%08.5f,", lon / 1000000, ((lon % 1000000)*60) / 1000000.0);
+  char lonStr[32];
+  snprintf(lonStr, sizeof(lonStr), "%03ld%08.5f,", lon / 1000000, ((lon % 1000000)*60) / 1000000.0);
 
-  char speedStr[8];
-  snprintf(speedStr, 8, "%01.1f,", nmea.getSpeed() / 1000.0);
+  char speedStr[24];
+  snprintf(speedStr, sizeof(speedStr), "%01.1f,", nmea.getSpeed() / 1000.0);
 
-  char courseStr[7];
-  snprintf(courseStr, 7, "%01.1f,", nmea.getCourse() / 1000.0);
+  char courseStr[24];
+  snprintf(courseStr, sizeof(courseStr), "%01.1f,", nmea.getCourse() / 1000.0);
 
   String message = msg_type + timeStr + status + ',' + latStr + latDir + ',' +
                     lonStr + lonDir + ',' + speedStr + courseStr + dateStr + ',' + ',' + mode;
@@ -609,16 +421,26 @@ void GpsInterface::setGPSInfo() {
 
   this->datetime = this->dt_string_from_gps();
 
-  #ifdef MARAUDER_MINI_V3
-    const uint8_t hdop = nmea.getHDOP();
-    this->accuracy =
-        hdop == 255 ? 0.0f : 2.5f * (static_cast<float>(hdop) / 10.0f);
+  if (nmea.isValid() && nmea.getYear() >= 2020) {
+    const marauder::clock::UtcDateTime gps_time = {
+        static_cast<uint16_t>(nmea.getYear()),
+        static_cast<uint8_t>(nmea.getMonth()),
+        static_cast<uint8_t>(nmea.getDay()),
+        static_cast<uint8_t>(nmea.getHour()),
+        static_cast<uint8_t>(nmea.getMinute()),
+        static_cast<uint8_t>(nmea.getSecond()),
+    };
+    device_clock_obj.syncFromGps(gps_time);
+  }
 
-    // Acquisition sentences can be valid NMEA while carrying no position.
-    // Keep the last real coordinates until another complete fix arrives.
-    if (!this->good_fix)
-      return;
-  #endif
+  const uint8_t hdop = nmea.getHDOP();
+  this->accuracy = hdop == 255 ? 0.0f : 2.5f * (static_cast<float>(hdop) / 10.0f);
+
+  // Invalid GGA/RMC sentences legitimately report the acquisition state and
+  // satellite count, but their empty coordinates decode to MicroNMEA's
+  // sentinel value. Preserve the last real position until a new fix arrives.
+  if (!this->good_fix)
+    return;
 
   this->lat_int = nmea.getLatitude();
   this->lon_int = nmea.getLongitude();
@@ -631,14 +453,9 @@ void GpsInterface::setGPSInfo() {
   }
   this->altf = (float)alt / 1000;
 
-  #ifndef MARAUDER_MINI_V3
-    this->accuracy = 2.5 * ((float)nmea.getHDOP()/10);
-  #endif
-
   //nmea.clear();
 }
 
-#ifdef MARAUDER_MINI_V3
 void GpsInterface::handleCompletedSentence() {
   const char* sentence = nmea.getSentence();
   if (sentence == nullptr || sentence[0] != '$' ||
@@ -658,7 +475,6 @@ void GpsInterface::handleCompletedSentence() {
     this->setGPSInfo();
   }
 }
-#endif
 
 float GpsInterface::getAccuracy() {
   return this->accuracy;
@@ -711,7 +527,6 @@ bool GpsInterface::getGpsModuleStatus() {
   return this->gps_enabled;
 }
 
-#ifdef MARAUDER_MINI_V3
 uint32_t GpsInterface::getBaudRate() {
   return this->gps_baud;
 }
@@ -721,7 +536,6 @@ uint32_t GpsInterface::getLastSentenceAgeMs() {
     return UINT32_MAX;
   return millis() - this->last_sentence_ms;
 }
-#endif
 
 String GpsInterface::getText() {
   return this->gps_text;
@@ -750,67 +564,27 @@ int GpsInterface::getTextQueueSize() {
 }
 
 String GpsInterface::getTextQueue(bool flush) {
-  if(this->queue_enabled_flag){
-    if(this->text){
-      int size=this->text->size();
-      if(size){
-        String text;
-        for(int i=0;i<size;i++){
-          String now=this->text_in->get(i);
-          if(now!=""){
-            if(text!=""){
-              text+='\r';
-              text+='\n';
-            }
-            text+=now;
-          }
-        }
-        if(flush){
-          LinkedList<String> *delme=this->text;
-          this->text_cycles=0;
-          this->text=this->text_in;
-          if(!this->text) this->text=new LinkedList<String>;
-          if(this->text->size()) this->text_cycles++;
-          this->text_in=new LinkedList<String>;
-          delete delme;
-        }
-        return text;
-      }
-    }
-    else{
-      this->text=new LinkedList<String>;
-      this->text_cycles=0;
-    }
-
-    if(this->text_in){
-      int size=this->text_in->size();
-      if(size){
-        LinkedList<String> *buffer=this->text_in;
-        if(flush)
-          this->text_in=new LinkedList<String>;
-        String text;
-        for(int i=0;i<size;i++){
-          String now=buffer->get(i);
-          if(now!=""){
-            if(text!=""){
-              text+='\r';
-              text+='\n';
-            }
-            text+=now;
-          }
-        }
-        if(flush)
-          delete buffer;
-        return text;
-      }
-    }
-    else
-      this->text_in=new LinkedList<String>;
-
+  if(!this->queue_enabled_flag)
     return this->gps_text;
+
+  if(!this->text)
+    this->text=new LinkedList<String>;
+
+  String result;
+  for(int i=0;i<this->text->size();i++){
+    const String line=this->text->get(i);
+    if(line.length()==0)
+      continue;
+    if(result.length()>0)
+      result+="\r\n";
+    result+=line;
   }
-  else
-    return this->gps_text;
+
+  if(flush){
+    this->text->clear();
+    this->text_cycles=0;
+  }
+  return result.length()>0 ? result : this->gps_text;
 }
 
 String GpsInterface::getNmea() {
@@ -826,46 +600,31 @@ String GpsInterface::getNmeaNotparsed() {
 }
 
 void GpsInterface::main() {
-  #ifdef MARAUDER_MINI_V3
-    while (gpsSerial.available()) {
-      const char c = gpsSerial.read();
-      if (nmea.process(c))
-        this->handleCompletedSentence();
-    }
+  while (gpsSerial.available()) {
+    const char c = gpsSerial.read();
+    if (nmea.process(c))
+      this->handleCompletedSentence();
+  }
 
-    const uint32_t now = millis();
-    if (this->gps_enabled && this->last_sentence_ms != 0 &&
-        now - this->last_sentence_ms > GPS_TRAFFIC_TIMEOUT_MS) {
-      this->gps_enabled = false;
-      this->good_fix = false;
-      this->num_sats = 0;
-      this->gps_baud = 0;
-      this->last_baud_switch_ms = now;
-    }
+  const uint32_t now = millis();
+  if (this->gps_enabled && this->last_sentence_ms != 0 &&
+      now - this->last_sentence_ms > GPS_TRAFFIC_TIMEOUT_MS) {
+    this->gps_enabled = false;
+    this->good_fix = false;
+    this->num_sats = 0;
+    this->gps_baud = 0;
+    this->last_baud_switch_ms = now;
+  }
+  if (this->good_fix && this->last_fix_sentence_ms != 0 &&
+      now - this->last_fix_sentence_ms > GPS_FIX_TIMEOUT_MS) {
+    this->good_fix = false;
+  }
 
-    if (this->good_fix && this->last_fix_sentence_ms != 0 &&
-        now - this->last_fix_sentence_ms > GPS_FIX_TIMEOUT_MS) {
-      this->good_fix = false;
-    }
-
-    if (!this->gps_enabled &&
-        now - this->last_baud_switch_ms >= RECOVERY_BAUD_DWELL_MS) {
-      this->recovery_baud_index =
-          (this->recovery_baud_index + 1) % GPS_BAUD_RATE_COUNT;
-      this->listenAtBaud(GPS_BAUD_RATES[this->recovery_baud_index]);
-    }
-  #else
-    while (gpsSerial.available()) {
-      char c = gpsSerial.read();
-      nmea.process(c);
-    }
-
-    uint8_t num_sat = nmea.getNumSatellites();
-
-    if ((nmea.isValid()) && (num_sat > 0))
-      this->setGPSInfo();
-    else if ((!nmea.isValid()) && (num_sat <= 0))
-      this->setGPSInfo();
-  #endif
+  if (!this->gps_enabled &&
+      now - this->last_baud_switch_ms >= RECOVERY_BAUD_DWELL_MS) {
+    this->recovery_baud_index =
+        (this->recovery_baud_index + 1) % GPS_BAUD_RATE_COUNT;
+    this->listenAtBaud(GPS_BAUD_RATES[this->recovery_baud_index]);
+  }
 }
 #endif

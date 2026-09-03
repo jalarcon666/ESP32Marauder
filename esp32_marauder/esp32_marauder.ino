@@ -19,9 +19,7 @@ https://www.online-utility.org/image/convert/to/XBM
 #endif
 
 #include "Assets.h"
-#ifdef MARAUDER_MINI_V3
-  #include "SplashScreen.h"
-#endif
+#include "SplashScreen.h"
 #include "WiFiScan.h"
 #ifdef HAS_SD
   #include "SDInterface.h"
@@ -39,6 +37,7 @@ https://www.online-utility.org/image/convert/to/XBM
 #endif
 
 #include "settings.h"
+#include "DeviceClock.h"
 #include "CommandLine.h"
 #include "lang_var.h"
 
@@ -81,6 +80,7 @@ EvilPortal evil_portal_obj;
 Buffer buffer_obj;
 Settings settings_obj;
 CommandLine cli_obj;
+DeviceClock device_clock_obj;
 
 #ifdef HAS_T_DONGLE_DISPLAY
   TDongleDisplay t_dongle_display;
@@ -115,7 +115,7 @@ CommandLine cli_obj;
 
 const String PROGMEM version_number = MARAUDER_VERSION;
 
-#if defined(HAS_SCREEN) && defined(MARAUDER_MINI_V3)
+#ifdef HAS_SCREEN
 static void drawSplashText(const String& text, int16_t center_x, int16_t y,
                            uint16_t color, uint8_t font = 1) {
   display_obj.tft.setTextColor(TFT_BLACK);
@@ -129,16 +129,37 @@ static void drawMarauderEternalSplash() {
   display_obj.tft.setTextWrap(false);
   display_obj.tft.setTextSize(1);
   display_obj.tft.setFreeFont(NULL);
-  display_obj.tft.setSwapBytes(true);
-  display_obj.tft.pushImage(0, 0, MARAUDER_ETERNAL_SPLASH_WIDTH,
-                            MARAUDER_ETERNAL_SPLASH_HEIGHT,
-                            marauder_eternal_splash);
-  display_obj.tft.setSwapBytes(false);
-  drawSplashText("ESP32 MARAUDER", TFT_WIDTH / 2, 1, TFT_WHITE);
-  drawSplashText("ETERNAL", TFT_WIDTH / 2, 11, 0x733F);
-  drawSplashText("Version " MARAUDER_VERSION, TFT_WIDTH / 2, 95, TFT_WHITE);
-  drawSplashText("JustCallMeKoKo/", TFT_WIDTH / 2, 106, TFT_LIGHTGREY);
-  drawSplashText("n0vajay05", TFT_WIDTH / 2, 116, TFT_LIGHTGREY);
+
+  #ifdef MARAUDER_MINI_V3
+    display_obj.tft.setSwapBytes(true);
+    display_obj.tft.pushImage(0, 0,
+                              MARAUDER_ETERNAL_SPLASH_WIDTH,
+                              MARAUDER_ETERNAL_SPLASH_HEIGHT,
+                              marauder_eternal_splash);
+    display_obj.tft.setSwapBytes(false);
+
+    drawSplashText("ESP32 MARAUDER", TFT_WIDTH / 2, 1, TFT_WHITE);
+    drawSplashText("ETERNAL", TFT_WIDTH / 2, 11, 0x733F);
+    drawSplashText("Version " MARAUDER_VERSION, TFT_WIDTH / 2, 95, TFT_WHITE);
+    drawSplashText("JustCallMeKoKo/", TFT_WIDTH / 2, 106, TFT_LIGHTGREY);
+    drawSplashText("n0vajay05", TFT_WIDTH / 2, 116, TFT_LIGHTGREY);
+  #else
+    #if defined(MARAUDER_CARDPUTER) || defined(MARAUDER_CARDPUTER_ADV)
+      const int16_t splash_center_x = TFT_HEIGHT / 2;
+      const int16_t splash_height = TFT_WIDTH;
+    #else
+      const int16_t splash_center_x = TFT_WIDTH / 2;
+      const int16_t splash_height = TFT_HEIGHT;
+    #endif
+
+    drawSplashText("ESP32 Marauder Eternal", splash_center_x,
+                   splash_height * 0.30, TFT_WHITE);
+    drawSplashText("Version " MARAUDER_VERSION, splash_center_x,
+                   splash_height * 0.48, 0x733F);
+    drawSplashText("JustCallMeKoKo/n0vajay05", splash_center_x,
+                   splash_height * 0.66, TFT_LIGHTGREY);
+  #endif
+
   display_obj.tft.setTextColor(TFT_WHITE, TFT_BLACK);
 }
 #endif
@@ -162,7 +183,7 @@ uint32_t currentTime  = 0;
 #endif
 
 // Helper macros for LEDC API compatibility (2.x vs 3.x board package).
-// Mini V3 uses an active-low backlight, so its PWM duty is inverted.
+// Mini V3's backlight is active-low, so its PWM duty is inverted.
 #if defined(HAS_SCREEN) && (!defined(HAS_MINI_SCREEN) || defined(MARAUDER_MINI_V3))
   #if defined(MARAUDER_MINI) || defined(MARAUDER_MINI_V3)
     #define BL_PWM_DUTY(brightness) (255U - (uint8_t)(brightness))
@@ -288,6 +309,7 @@ void setup()
   #endif
 
   Serial.begin(115200);
+  device_clock_obj.begin();
 
   #ifdef HAS_ACT_LED
     pinMode(ACT_LED_PIN, OUTPUT);
@@ -371,17 +393,7 @@ void setup()
   #endif
 
   #ifdef HAS_SCREEN
-    #ifdef MARAUDER_MINI_V3
-      drawMarauderEternalSplash();
-    #elif !defined(MARAUDER_CARDPUTER) && !defined(MARAUDER_CARDPUTER_ADV)
-      display_obj.tft.drawCentreString("ESP32 Marauder", TFT_WIDTH/2, TFT_HEIGHT * 0.33, 1);
-      display_obj.tft.drawCentreString("JustCallMeKoko", TFT_WIDTH/2, TFT_HEIGHT * 0.5, 1);
-      display_obj.tft.drawCentreString(display_obj.version_number, TFT_WIDTH/2, TFT_HEIGHT * 0.66, 1);
-    #else
-      display_obj.tft.drawCentreString("ESP32 Marauder", TFT_HEIGHT/2, TFT_WIDTH * 0.33, 1);
-      display_obj.tft.drawCentreString("JustCallMeKoko", TFT_HEIGHT/2, TFT_WIDTH * 0.5, 1);
-      display_obj.tft.drawCentreString(display_obj.version_number, TFT_HEIGHT/2, TFT_WIDTH * 0.66, 1);
-    #endif
+    drawMarauderEternalSplash();
   #endif
 
 
@@ -398,14 +410,8 @@ void setup()
     #endif
   #endif
 
-  settings_obj.begin();
-
-  const char* type = settings_obj.getSettingType("wu");
-
-  if (type == nullptr || type[0] == '\0') {
-    Serial.println(F("Current settings format not supported. Installing new default settings..."));
-    settings_obj.createDefaultSettings(SPIFFS);
-  }
+  if (!settings_obj.begin())
+    Serial.println(F("Settings initialization failed; using in-memory defaults"));
 
   #ifndef HAS_SIMPLEX_DISPLAY
     #if defined(HAS_SD)
@@ -424,7 +430,7 @@ void setup()
 
   #ifdef HAS_SCREEN
     display_obj.tft.setTextColor(TFT_GREEN, TFT_BLACK);
-    display_obj.tft.drawCentreString("Initializing...", TFT_WIDTH/2, TFT_HEIGHT * 0.82, 1);
+    display_obj.tft.drawCentreString("Initializing...", TFT_WIDTH / 2, (TFT_HEIGHT / 2) - 4, 1);
   #endif
 
   evil_portal_obj.setup();
@@ -508,6 +514,15 @@ void loop()
 
   // Update all of our objects
   cli_obj.main(currentTime);
+
+  if (cli_obj.sdSessionActive()) {
+    #ifdef HAS_GPS
+      gps_obj.main();
+    #endif
+    delay(2);
+    return;
+  }
+
   wifi_scan_obj.main(currentTime);
 
   #ifdef HAS_T_DONGLE_DISPLAY
