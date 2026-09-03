@@ -41,7 +41,7 @@ class MiniV3HardwareTests(unittest.TestCase):
         self.assertIn('#define TFT_BACKLIGHT_ON LOW', setup)
         self.assertIn('#define SPI_FREQUENCY 20000000', setup)
         self.assertIn('MARAUDER_MINI_V3 requires the ESP32-C5 board target', configs)
-        self.assertIn('Six 15px rows plus 2px spacing fit', configs)
+        self.assertIn('Six modern menu cards fit', configs)
         self.assertIn('#define BUTTON_SCREEN_LIMIT 6', configs)
 
     def test_custom_partition_layout_is_wired_into_every_build(self):
@@ -76,7 +76,7 @@ class MiniV3HardwareTests(unittest.TestCase):
                 workflow,
             )
             self.assertIn(
-                "-Wl,-zmuldefs",
+                "--wrap=ieee80211_raw_frame_sanity_check",
                 workflow,
             )
 
@@ -87,14 +87,15 @@ class MiniV3HardwareTests(unittest.TestCase):
         scan_h = (ROOT / "esp32_marauder" / "WiFiScan.h").read_text()
 
         self.assertIn('extern "C" int ieee80211_raw_frame_sanity_check(', scan_cpp)
-        self.assertNotIn("__wrap_ieee80211_raw_frame_sanity_check", scan_cpp)
-        self.assertIn("transmitDeauthFrame", scan_cpp)
+        self.assertIn("__wrap_ieee80211_raw_frame_sanity_check", scan_cpp)
+        self.assertIn("transmitPreparedDeauthFrame", scan_cpp + scan_h)
         self.assertIn("deauth_sequence++", scan_cpp)
-        self.assertIn("sequenceControl >> 8", scan_cpp)
-        self.assertIn("deauth_tx_failed", scan_cpp + scan_h)
+        self.assertIn("sequence_control >> 8", scan_cpp)
+        self.assertIn("deauth_tx_failures", scan_cpp + scan_h)
         self.assertIn("ESP_ERR_WIFI_WOULD_BLOCK", scan_cpp)
         self.assertIn("delayMicroseconds(250)", scan_cpp)
-        self.assertIn("deauth_last_error", scan_cpp + scan_h)
+        self.assertIn("DEAUTH_TX_INTERVAL_MS", scan_cpp)
+        self.assertIn("deauth_last_error_ms", scan_cpp + scan_h)
 
 
 if __name__ == "__main__":

@@ -23,9 +23,13 @@ class SpiffsMachineProtocolTests(unittest.TestCase):
     def test_machine_restore_acknowledges_reboot(self):
         source = (ROOT / "esp32_marauder" / "CommandLine.cpp").read_text()
         restore = source[source.index("cmd_args.get(0) == RESTORE_SPIFFS_CMD) {") :]
-        success = restore.index(
-            'machineResult(transaction_id, command, "success", "OK", files, bytes, operation == 2)'
+        success_match = re.search(
+            r'machineResult\(transaction_id, command, "success", "OK", files,\s*'
+            r'bytes, operation == 2\)',
+            restore,
         )
+        self.assertIsNotNone(success_match)
+        success = success_match.start()
         restart = restore.index("ESP.restart();")
         self.assertLess(success, restart)
         self.assertIn("if (success && operation == 2)", restore[success:restart])

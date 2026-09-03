@@ -53,7 +53,7 @@ class MiniV3DetectorTests(unittest.TestCase):
         ):
             self.assertIn(f"DetectorType::{name}", detector + menu)
 
-        for label in ("Device Scout", "Activity Scanner", "Jam Detector"):
+        for label in ("Device Scout", "Scanner", "Jam Detector"):
             self.assertIn(f'"{label}"', menu)
 
     def test_nyanbox_attribution_is_shipped(self):
@@ -72,12 +72,13 @@ class MiniV3DetectorTests(unittest.TestCase):
         self.assertIn("No frame is transmitted by this function", header)
         self.assertIn("selectDeauthTarget", detector)
         self.assertIn('drawString("AUTHORIZED TEST?"', detector)
+        self.assertIn("bool accepted = false", detector)
         self.assertIn("accepted = true", detector)
         self.assertIn("WiFiCameraDetector::selectDeauthTarget(target)", menu)
 
         self.assertIn("WIFI_ATTACK_CAMERA_DEAUTH", scan)
         self.assertIn("sendCameraDeauthFrame", scan)
-        self.assertIn("stopping_camera_deauth", scan)
+        self.assertIn("stoppingCameraDeauth", scan)
         self.assertIn("memset(&this->camera_deauth_targets", scan)
 
         for label in ("Camera Detect", "Camera Deauther"):
@@ -94,7 +95,10 @@ class MiniV3DetectorTests(unittest.TestCase):
         self.assertIn("esp_wifi_set_promiscuous(true)", detector)
         self.assertNotIn("esp_wifi_80211_tx", detector)
         self.assertIn('"Detect Flock"', menu)
-        self.assertIn("WiFiFlockDetector::run()", menu)
+        self.assertIn("wifi_scan_obj.StartScan(BT_SCAN_FLOCK", menu)
+        self.assertIn("WiFiFlockDetector::matchPacket", detector + (
+            ROOT / "esp32_marauder" / "WiFiScan.cpp"
+        ).read_text())
         self.assertIn("MIT License", license_text)
 
 

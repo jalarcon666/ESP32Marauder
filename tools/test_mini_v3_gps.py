@@ -1,4 +1,3 @@
-import re
 import unittest
 from pathlib import Path
 
@@ -20,26 +19,22 @@ class MiniV3GpsTests(unittest.TestCase):
         self.assertIn("void GpsInterface::listenAtBaud", source)
         self.assertIn("uint32_t getLastSentenceAgeMs();", header)
 
-        begin_body = re.search(
-            r"void GpsInterface::begin\(\) \{(?P<body>.*?)\n\}", source, re.S
-        ).group("body")
-        mini_branch = begin_body.split("#else", 1)[0]
-        stock_branch = begin_body.split("#else", 1)[1]
-        self.assertNotIn("delay(", mini_branch)
-        self.assertNotIn("$PSTMSAVEPAR", mini_branch)
-        self.assertIn("$PSTMSAVEPAR", stock_branch)
+        begin_start = source.index("void GpsInterface::begin()")
+        begin_end = source.index("void GpsInterface::listenAtBaud", begin_start)
+        begin_body = source[begin_start:begin_end]
+        self.assertNotIn("delay(", begin_body)
+        self.assertNotIn("$PSTMSAVEPAR", begin_body)
+        self.assertIn("rotate in main()", begin_body)
 
     def test_gps_menu_and_diagnostics_remain_available_while_searching(self):
         menu = (ROOT / "esp32_marauder" / "MenuFunctions.cpp").read_text()
         wifi_scan = (ROOT / "esp32_marauder" / "WiFiScan.cpp").read_text()
 
-        self.assertIn("const bool expose_gps_features = true;", menu)
-        self.assertIn(
-            "const bool expose_gps_features = gps_obj.getGpsModuleStatus();",
-            menu,
-        )
-        self.assertGreaterEqual(menu.count("if (expose_gps_features)"), 4)
-        self.assertIn("const bool show_gps_status = gps_obj.getFixStatus();", menu)
+        for label in ('"GPS Data"', '"NMEA Stream"', '"GPS Tracker"',
+                      '"GPS POI"'):
+            self.assertIn(label, menu)
+        self.assertIn("const bool gps_locked = gps_obj.getFixStatus();", menu)
+        self.assertIn("if (gps_locked)", menu)
 
         self.assertIn('F("  NMEA: Searching")', wifi_scan)
         self.assertIn('"  Baud: " + String(gps_obj.getBaudRate())', wifi_scan)

@@ -19,8 +19,9 @@ class MiniV3SsidToolsTests(unittest.TestCase):
             '"SSID Finder"',
             '"SSID Beacon Clone"',
             '"SSID Group Deauth"',
-            "buildSSIDGroupMenu(true)",
-            "setFoxHuntTarget(target.bssid, target.essid",
+            "buildSSIDGroupMenu(SSIDMenuMode::Deauth)",
+            "SSIDMenuMode::FoxHunt",
+            "const bool fox_hunt_mode",
         ):
             self.assertIn(marker, self.menu)
 

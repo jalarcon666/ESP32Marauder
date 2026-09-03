@@ -1,0 +1,21 @@
+name: Eternal native helper tests
+
+on:
+  push:
+    paths:
+      - "esp32_marauder/**"
+      - "tests/native/**"
+      - "scripts/test-native.sh"
+  pull_request:
+    paths:
+      - "esp32_marauder/**"
+      - "tests/native/**"
+      - "scripts/test-native.sh"
+
+jobs:
+  native-helpers:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile and run Eternal helper tests
+        run: bash scripts/test-native.sh

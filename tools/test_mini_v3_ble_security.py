@@ -59,12 +59,12 @@ class MiniV3BleSecurityTests(unittest.TestCase):
             '"Scan Targets"',
             '"Capture Adverts to SD"',
             '"Select Target"',
-            '"Advertised Info"',
-            '"GATT Enumeration"',
+            '"GATT - Advertised Services Enumeration"',
             '"Device Spoof"',
         ):
             self.assertIn(label, menu)
-        self.assertIn('"Authorize Device Spoof"', menu)
+        self.assertIn("showBLETargetDetails", menu)
+        self.assertIn('"Authorize device spoof"', menu)
         self.assertIn('"Run (Authorized)"', menu)
 
 
