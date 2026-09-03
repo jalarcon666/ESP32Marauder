@@ -48,6 +48,12 @@
 
 #define MARAUDER_VERSION "v1.15.1"
 
+#ifdef MARAUDER_MINI_V3
+  #define MARAUDER_PARTITION_LAYOUT "mini-v3-c5-8m-ota-v1"
+#else
+  #define MARAUDER_PARTITION_LAYOUT "legacy"
+#endif
+
   #define GRAPH_REFRESH   100
 
   #define TRACK_EVICT_SEC 90 // Seconds before marking tracked MAC as tombstone

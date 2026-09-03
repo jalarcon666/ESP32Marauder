@@ -392,11 +392,18 @@ void SDInterface::runUpdate(String file_name) {
     size_t updateSize = updateBin.size();
 
     if (updateSize > 0) {
+      if (!this->validateUpdate(updateBin)) {
+        updateBin.close();
+        return;
+      }
       #ifdef HAS_SCREEN
         display_obj.tft.println(F(text_table2[1]));
       #endif
       Serial.println(F("Starting update over SD. Please wait..."));
-      this->performUpdate(updateBin, updateSize);
+      if (!this->performUpdate(updateBin, updateSize)) {
+        updateBin.close();
+        return;
+      }
     }
     else {
       #ifdef HAS_SCREEN
@@ -407,6 +414,7 @@ void SDInterface::runUpdate(String file_name) {
       #ifdef HAS_SCREEN
         display_obj.tft.setTextColor(TFT_WHITE);
       #endif
+      updateBin.close();
       return;
     }
 
@@ -416,12 +424,8 @@ void SDInterface::runUpdate(String file_name) {
     #ifdef HAS_SCREEN
       display_obj.tft.println(F(text_table2[3]));
     #endif
-    const esp_partition_t *running = esp_ota_get_running_partition();
-
-    const esp_partition_t *next = esp_ota_get_next_update_partition(NULL);
-
-    esp_err_t result = esp_ota_set_boot_partition(next);
-     
+    // Update.end() validates the image and selects the partition written by
+    // Update.begin(). Selecting "next" again here can choose a different slot.
     ESP.restart();
   }
   else {
@@ -436,7 +440,88 @@ void SDInterface::runUpdate(String file_name) {
   }
 }
 
-void SDInterface::performUpdate(Stream &updateSource, size_t updateSize) {
+bool SDInterface::validateUpdate(File &updateBin) {
+  #ifndef MARAUDER_MINI_V3
+    // The identity format and app-size limit below belong to the Mini V3 C5
+    // layout. Preserve the established SD update path for every other target.
+    updateBin.seek(0);
+    return true;
+  #else
+  constexpr size_t ESP_IMAGE_HEADER_SIZE = 24;
+  constexpr uint8_t ESP_IMAGE_MAGIC = 0xe9;
+  constexpr uint16_t ESP32_C5_IMAGE_ID = 0x17;
+  constexpr size_t APPLICATION_PARTITION_SIZE = 0x3c0000;
+
+  if (updateBin.size() < ESP_IMAGE_HEADER_SIZE ||
+      updateBin.size() > APPLICATION_PARTITION_SIZE) {
+    Serial.println(F("Rejected SD update: image size does not fit app partition"));
+    return false;
+  }
+
+  uint8_t image_header[ESP_IMAGE_HEADER_SIZE];
+  updateBin.seek(0);
+  if (updateBin.read(image_header, sizeof(image_header)) !=
+          static_cast<int>(sizeof(image_header)) ||
+      image_header[0] != ESP_IMAGE_MAGIC ||
+      (static_cast<uint16_t>(image_header[12]) |
+       (static_cast<uint16_t>(image_header[13]) << 8)) !=
+          ESP32_C5_IMAGE_ID) {
+    updateBin.seek(0);
+    Serial.println(F("Rejected SD update: invalid ESP32-C5 application header"));
+    return false;
+  }
+
+  MarauderFirmware::MetadataScanner scanner;
+  uint8_t buffer[512];
+  updateBin.seek(0);
+  while (updateBin.available() && !scanner.found()) {
+    const size_t bytes_read = updateBin.read(buffer, sizeof(buffer));
+    for (size_t i = 0; i < bytes_read && !scanner.found(); i++)
+      scanner.push(buffer[i]);
+  }
+  updateBin.seek(0);
+
+  if (!scanner.found()) {
+    #ifdef HAS_SCREEN
+      display_obj.tft.setTextColor(TFT_RED);
+      display_obj.tft.println(F("Rejected: invalid image"));
+      display_obj.tft.setTextColor(TFT_WHITE);
+    #endif
+    Serial.println(F("Rejected SD update: Eternal firmware identity not found"));
+    return false;
+  }
+
+  const MarauderFirmware::Metadata &candidate = scanner.metadata();
+  const MarauderFirmware::Metadata &current =
+      MarauderFirmware::currentMetadata();
+  if (!MarauderFirmware::metadataMatches(candidate, current)) {
+    #ifdef HAS_SCREEN
+      display_obj.tft.setTextColor(TFT_RED);
+      display_obj.tft.println(F("Rejected: wrong device"));
+      display_obj.tft.setTextColor(TFT_WHITE);
+    #endif
+    Serial.print(F("Rejected SD update: expected "));
+    Serial.print(current.hardware);
+    Serial.print(F("/"));
+    Serial.print(current.chip);
+    Serial.print(F(", got "));
+    Serial.print(candidate.hardware);
+    Serial.print(F("/"));
+    Serial.println(candidate.chip);
+    return false;
+  }
+
+  Serial.print(F("Validated SD update for "));
+  Serial.print(candidate.hardware);
+  Serial.print(F("/"));
+  Serial.print(candidate.chip);
+  Serial.print(F(" version "));
+  Serial.println(candidate.version);
+  return true;
+  #endif
+}
+
+bool SDInterface::performUpdate(Stream &updateSource, size_t updateSize) {
   if (Update.begin(updateSize)) {   
     #ifdef HAS_SCREEN
       display_obj.tft.println(text_table2[5] + String(updateSize));
@@ -460,10 +545,12 @@ void SDInterface::performUpdate(Stream &updateSource, size_t updateSize) {
       Serial.print(F("/"));
       Serial.print(updateSize);
       Serial.println(F(". Retry?"));
+      Update.abort();
+      return false;
     }
     if (Update.end()) {
       if (Update.isFinished()) {
-
+        return true;
       }
       else {
         #ifdef HAS_SCREEN
@@ -474,6 +561,7 @@ void SDInterface::performUpdate(Stream &updateSource, size_t updateSize) {
         #ifdef HAS_SCREEN
           display_obj.tft.setTextColor(TFT_WHITE);
         #endif
+        return false;
       }
     }
     else {
@@ -482,6 +570,7 @@ void SDInterface::performUpdate(Stream &updateSource, size_t updateSize) {
       #endif
       Serial.print(F("Error Occurred. Error #: "));
       Serial.println(Update.getError());
+      return false;
     }
 
   }
@@ -491,5 +580,6 @@ void SDInterface::performUpdate(Stream &updateSource, size_t updateSize) {
       display_obj.tft.println(text_table2[14]);
     #endif
     Serial.println(F("Not enough space to begin OTA"));
+    return false;
   }
 }

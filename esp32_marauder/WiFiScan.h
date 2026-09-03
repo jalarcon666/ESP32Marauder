@@ -947,6 +947,15 @@ class WiFiScan
     uint32_t eapol_frames = 0;
     uint32_t complete_eapol = 0;
     uint32_t flock_devices = 0;
+    uint32_t flock_wifi_devices = 0;
+    uint32_t flock_ble_devices = 0;
+    static constexpr uint8_t FLOCK_SEEN_CAPACITY = 64;
+    uint8_t flock_wifi_history[FLOCK_SEEN_CAPACITY][6] = {};
+    uint8_t flock_ble_history[FLOCK_SEEN_CAPACITY][6] = {};
+    uint8_t flock_wifi_history_count = 0;
+    uint8_t flock_ble_history_count = 0;
+    uint8_t flock_wifi_history_cursor = 0;
+    uint8_t flock_ble_history_cursor = 0;
     int8_t min_rssi = 0;
     int8_t max_rssi = -128;
 
@@ -1089,6 +1098,8 @@ class WiFiScan
       int8_t checkAnalyzerButtons(uint32_t currentTime);
     #endif
     bool seen_mac(unsigned char* mac, bool simple = true);
+    bool trackFlockMac(const uint8_t mac[6], bool bluetooth);
+    void resetFlockTracking();
     int update_mac_entry(const uint8_t mac[6], int8_t rssi = 0, bool bt = false);
     inline void insert_mac_entry(uint32_t idx, const uint8_t mac[6], uint32_t now_ms, int8_t rssi = 0, bool bt = false);
     void evict_and_insert(const uint8_t mac[6], uint32_t now_ms);

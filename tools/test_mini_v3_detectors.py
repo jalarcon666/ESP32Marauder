@@ -6,6 +6,24 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class MiniV3DetectorTests(unittest.TestCase):
+    def test_canonical_ble_flock_classifier_is_integrated(self):
+        classifier = (
+            ROOT / "esp32_marauder" / "BLEFlockDetector.cpp"
+        ).read_text(encoding="utf-8")
+        scan = (ROOT / "esp32_marauder" / "WiFiScan.cpp").read_text(
+            encoding="utf-8"
+        )
+        header = (ROOT / "esp32_marauder" / "WiFiScan.h").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("specificNameMatches", classifier)
+        self.assertIn("considerServiceUuid", classifier)
+        self.assertIn("BLEFlockDetector::classify", scan)
+        self.assertIn("WiFiFlockDetector::matchPacket", scan)
+        self.assertIn("trackFlockMac", scan)
+        self.assertIn("flock_wifi_devices", header)
+        self.assertIn("flock_ble_devices", header)
+
     def test_combined_scout_and_activity_tools_are_mini_v3_guarded(self):
         scout = (ROOT / "esp32_marauder" / "WirelessDeviceScout.cpp").read_text()
         activity = (ROOT / "esp32_marauder" / "WirelessActivityTools.cpp").read_text()
