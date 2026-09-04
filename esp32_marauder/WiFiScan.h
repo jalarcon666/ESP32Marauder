@@ -459,7 +459,6 @@ class WiFiScan
     int packets_sent = 0;
     uint16_t deauth_ap_cursor = 0;
     uint16_t deauth_station_cursor = 0;
-    uint16_t evil_portal_deauth_cursor = 0;
     uint32_t deauth_next_tx_ms = 0;
     uint32_t evil_portal_deauth_next_ms = 0;
     uint32_t deauth_tx_attempts = 0;
@@ -814,6 +813,7 @@ class WiFiScan
     esp_err_t transmitPreparedDeauthFrame();
     bool sendNextSelectedAPDeauth(const uint8_t destination[6],
                                   uint16_t& cursor);
+    bool sendEvilPortalAnchorDeauth();
     bool sendNextSelectedStationDeauth();
     void sendCameraDeauthFrame(WiFiCameraDetector::DeauthLink& link);
     void drawCameraDeauthStatus();

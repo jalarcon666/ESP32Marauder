@@ -48,6 +48,10 @@ not copied because this fork already owns those deployment layers.
 - Camera deauthentication uses the same address-validation and transmission
   helper as the other deauthentication modes. Per-camera counters are retained
   and the common attempted, accepted, and failed counters are updated as well.
+- Evil Portal validates its SoftAP identity and IP before declaring readiness,
+  allows DHCP/DNS/HTTP a startup grace period, and scopes optional lab deauth to
+  the selected anchor BSSID. Deauth pauses while a portal client is associated
+  so the single C5 radio remains available for the captive session.
 
 ### Fork functionality retained
 

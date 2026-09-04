@@ -611,6 +611,12 @@ bool EvilPortal::startAP() {
     return false;
   }
 
+  if (WiFi.softAPSSID() != String(apName) || WiFi.softAPIP() != AP_IP) {
+    Serial.println(F("Evil Portal SoftAP readiness validation failed"));
+    WiFi.mode(WIFI_OFF);
+    return false;
+  }
+
   Serial.print(F("ap ip address: "));
   Serial.println(WiFi.softAPIP());
 
