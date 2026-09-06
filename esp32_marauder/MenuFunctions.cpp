@@ -2445,17 +2445,6 @@ bool MenuFunctions::startEvilPortalForSSIDGroup(const String& group_name) {
     return false;
   }
 
-  // An Evil Portal can advertise only one SSID. Keep the shared selector state,
-  // but remove stale selections from other SSID groups so EPDeauth cannot act on
-  // an unrelated network left selected from an earlier workflow.
-  for (int index = 0; index < access_points->size(); index++) {
-    AccessPoint access_point = access_points->get(index);
-    if (access_point.essid != group_name && access_point.selected) {
-      access_point.selected = false;
-      access_points->set(index, access_point);
-    }
-  }
-
   const AccessPoint anchor = access_points->get(anchor_index);
   if (!evil_portal_obj.setAP(group_name)) {
     Serial.println(F("Could not configure Evil Portal SSID"));
@@ -4003,6 +3992,28 @@ void MenuFunctions::RunSetup()
   this->addNodes(&evilPortalMenu, "User SSIDs", TFTCYAN, PROBE_SNIFF, [this]() {
     this->changeMenu(&ssidsMenu, true);
   });
+  htmlMenu.parentMenu = &evilPortalMenu;
+  this->addNodes(&evilPortalMenu, "Select EP HTML File", TFTCYAN,
+                 KEYBOARD_ICO, [this]() {
+    htmlMenu.list->clear();
+    this->addNodes(&htmlMenu, text09, TFTLIGHTGREY, 0, [this]() {
+      this->changeMenu(htmlMenu.parentMenu, true);
+    });
+
+    for (int i = 0; i < evil_portal_obj.html_files->size(); i++) {
+      this->addNodes(
+          &htmlMenu, evil_portal_obj.html_files->get(i).c_str(), TFTCYAN, 255,
+          [this, i]() {
+        evil_portal_obj.selected_html_index = i;
+        evil_portal_obj.target_html_name = evil_portal_obj.html_files->get(i);
+        evil_portal_obj.using_serial_html = false;
+        Serial.println("Set Evil Portal HTML as " +
+                       evil_portal_obj.target_html_name);
+        this->changeMenu(htmlMenu.parentMenu, true);
+      });
+    }
+    this->changeMenu(&htmlMenu, true);
+  });
 
   // Build WiFi General menu
   wifiGeneralMenu.parentMenu = &wifiMenu;
@@ -4055,29 +4066,6 @@ void MenuFunctions::RunSetup()
     this->changeMenu(&clearAPsMenu, true);
     wifi_scan_obj.RunClearStations();
   });
-  //#else // Mini EP HTML select
-    this->addNodes(&wifiGeneralMenu, "Select EP HTML File", TFTCYAN, KEYBOARD_ICO, [this](){
-      // Add the back button
-      htmlMenu.list->clear();
-        this->addNodes(&htmlMenu, text09, TFTLIGHTGREY, 0, [this]() {
-        this->changeMenu(htmlMenu.parentMenu, true);
-      });
-
-      // Populate the menu with buttons
-      for (int i = 0; i < evil_portal_obj.html_files->size(); i++) {
-        // This is the menu node
-        this->addNodes(&htmlMenu, evil_portal_obj.html_files->get(i).c_str(), TFTCYAN, 255, [this, i](){
-          evil_portal_obj.selected_html_index = i;
-          evil_portal_obj.target_html_name = evil_portal_obj.html_files->get(evil_portal_obj.selected_html_index);
-          Serial.println("Set Evil Portal HTML as " + evil_portal_obj.target_html_name);
-          evil_portal_obj.using_serial_html = false;
-          this->changeMenu(htmlMenu.parentMenu, true);
-          return;
-        });
-      }
-      this->changeMenu(&htmlMenu, true);
-    });
-
     //#if (!defined(HAS_ILI9341) && defined(HAS_BUTTONS))
       miniKbMenu.parentMenu = &wifiGeneralMenu;
       #if !defined(MARAUDER_CARDPUTER) && !defined(MARAUDER_CARDPUTER_ADV)
@@ -4087,7 +4075,6 @@ void MenuFunctions::RunSetup()
       #endif
     //#endif
 
-    htmlMenu.parentMenu = &wifiGeneralMenu;
     this->addNodes(&htmlMenu, text09, TFTLIGHTGREY, 0, [this]() {
       this->changeMenu(htmlMenu.parentMenu, true);
     });

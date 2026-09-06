@@ -26,15 +26,35 @@ class MiniV3EvilPortalTests(unittest.TestCase):
             "initTime + EVIL_PORTAL_STARTUP_GRACE_MS", source
         )
 
-    def test_deauth_is_scoped_to_anchor_and_pauses_for_clients(self):
+    def test_deauth_rotates_all_selected_aps_and_pauses_for_clients(self):
         source = WIFI_SCAN.read_text(encoding="utf-8")
         header = WIFI_SCAN_HEADER.read_text(encoding="utf-8")
-        self.assertIn("bool WiFiScan::sendEvilPortalAnchorDeauth()", source)
-        self.assertIn("evil_portal_obj.getTargetAPIndex()", source)
-        self.assertIn("anchor.bssid, anchor.channel, broadcast", source)
+        self.assertIn(
+            "bool WiFiScan::sendNextEvilPortalSelectedDeauth()", source
+        )
+        self.assertIn(
+            "broadcast, this->evil_portal_deauth_cursor", source
+        )
+        self.assertIn("sendNextSelectedAPDeauth", source)
+        self.assertIn("validDeauthChannel(access_point.channel)", source)
         self.assertIn("evil_portal_obj.getConnectedClientCount() > 0", source)
         self.assertIn("EVIL_PORTAL_CLIENT_REARM_MS", source)
-        self.assertIn("bool sendEvilPortalAnchorDeauth();", header)
+        self.assertIn("bool sendNextEvilPortalSelectedDeauth();", header)
+        self.assertIn("uint16_t evil_portal_deauth_cursor = 0;", header)
+
+    def test_manual_portal_preserves_other_selected_networks(self):
+        menu_source = (ROOT / "esp32_marauder" / "MenuFunctions.cpp").read_text(
+            encoding="utf-8"
+        )
+        start = menu_source.index(
+            "bool MenuFunctions::startEvilPortalForSSIDGroup"
+        )
+        end = menu_source.index(
+            "bool MenuFunctions::startAutoEvilPortalForSSIDGroup", start
+        )
+        function = menu_source[start:end]
+        self.assertNotIn("access_point.essid != group_name", function)
+        self.assertIn("evil_portal_obj.setTargetAP", function)
 
     def test_status_exposes_client_pause(self):
         source = WIFI_SCAN.read_text(encoding="utf-8")

@@ -459,6 +459,7 @@ class WiFiScan
     int packets_sent = 0;
     uint16_t deauth_ap_cursor = 0;
     uint16_t deauth_station_cursor = 0;
+    uint16_t evil_portal_deauth_cursor = 0;
     uint32_t deauth_next_tx_ms = 0;
     uint32_t evil_portal_deauth_next_ms = 0;
     uint32_t deauth_tx_attempts = 0;
@@ -469,6 +470,13 @@ class WiFiScan
     uint32_t deauth_next_ui_ms = 0;
     int16_t deauth_active_ap_index = -1;
     int16_t deauth_active_station_index = -1;
+    uint8_t preset_beacon_ssid_cursor = 0;
+    uint8_t preset_beacon_channel_cursor = 0;
+    uint16_t beacon_sequence = 0;
+    uint32_t preset_beacon_next_tx_ms = 0;
+    uint32_t preset_beacon_next_channel_ms = 0;
+    uint32_t beacon_tx_failures = 0;
+    uint32_t beacon_last_error_ms = 0;
     uint16_t evil_portal_scroll_offset = 0;
     uint32_t evil_portal_next_ui_ms = 0;
     const wifi_promiscuous_filter_t filt = {.filter_mask=WIFI_PROMIS_FILTER_MASK_MGMT | WIFI_PROMIS_FILTER_MASK_DATA};
@@ -813,7 +821,7 @@ class WiFiScan
     esp_err_t transmitPreparedDeauthFrame();
     bool sendNextSelectedAPDeauth(const uint8_t destination[6],
                                   uint16_t& cursor);
-    bool sendEvilPortalAnchorDeauth();
+    bool sendNextEvilPortalSelectedDeauth();
     bool sendNextSelectedStationDeauth();
     void sendCameraDeauthFrame(WiFiCameraDetector::DeauthLink& link);
     void drawCameraDeauthStatus();
@@ -823,6 +831,9 @@ class WiFiScan
     void broadcastCustomBeacon(uint32_t current_time, ssid custom_ssid, bool for_camera = false);
     void broadcastCustomBeacon(uint32_t current_time, AccessPoint custom_ssid, int scan_mode);
     void broadcastSetSSID(uint32_t current_time, const char* ESSID, uint8_t chan = 0, bool legit = false);
+    void runPresetBeaconAttack(uint32_t current_time,
+                               const char* const* preset_ssids,
+                               size_t preset_count);
     void executeFindMyLive(uint32_t current_time);
     void RunAPScan(uint8_t scan_mode, uint16_t color);
     void RunGPSNmea();

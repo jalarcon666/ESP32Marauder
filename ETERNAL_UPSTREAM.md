@@ -48,10 +48,11 @@ not copied because this fork already owns those deployment layers.
 - Camera deauthentication uses the same address-validation and transmission
   helper as the other deauthentication modes. Per-camera counters are retained
   and the common attempted, accepted, and failed counters are updated as well.
-- Evil Portal validates its SoftAP identity and IP before declaring readiness,
-  allows DHCP/DNS/HTTP a startup grace period, and scopes optional lab deauth to
-  the selected anchor BSSID. Deauth pauses while a portal client is associated
-  so the single C5 radio remains available for the captive session.
+- Evil Portal validates its SoftAP identity and IP before declaring readiness
+  and allows DHCP/DNS/HTTP a startup grace period. Its optional lab deauth
+  round-robins every selected BSSID, including targets on both 2.4 and 5 GHz,
+  then returns the single C5 radio to the portal anchor channel. Deauth pauses
+  while a portal client is associated so the captive session remains usable.
 - Mini V3 SoftAP modes explicitly restore and verify their protocols after
   raw/LR Wi-Fi modes. The general access point advertises Wi-Fi 6, while Evil
   Portal parses HT/VHT/HE beacon elements and mirrors the selected target's
@@ -62,6 +63,11 @@ not copied because this fork already owns those deployment layers.
 
 - The Mini V3 interface layer, bounded menu viewport, active-scan screens, and
   TX health display remain enabled alongside the Eternal 1.15.5 menus.
+- The supplied 128x128 RGB565 startup artwork replaces the previous Mini V3
+  splash, and the Evil Portal HTML selector is colocated with its attack menu.
+- Rick Roll and Funny SSID use valid-length beacon frames, locally administered
+  unicast source addresses, unique sequence numbers, accepted-TX accounting,
+  bounded queue backoff, and one-second dwell across channels 1, 6, and 11.
 - Passive Remote ID, Remote ID spoofing, the passive BLE suite, Wi-Fi/BLE Flock
   detection, camera detection, scoped camera deauthentication, and all ten
   Eternal games remain present.
@@ -80,7 +86,7 @@ not copied because this fork already owns those deployment layers.
 - Mini V3 builds use Arduino ESP32 core 3.3.4, DIO at 80 MHz, an 8 MB flash
   image, and offsets `0x2000`, `0x8000`, `0xe000`, and `0x10000`.
 - The imported firmware source was compiled for ESP32-C5, the raw-frame wrapper
-  was verified in the linker map, all 56 repository tests passed, and the
+  was verified in the linker map, all 61 repository tests passed, and the
   resulting application image checksum and validation hash were accepted by
   `esptool`.
 
