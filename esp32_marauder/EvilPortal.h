@@ -86,24 +86,18 @@ struct PortalCredential {
   String password;
 };
 
+class EvilPortal;
+
 class CaptiveRequestHandler : public AsyncWebHandler {
+private:
+  EvilPortal* portal;
+
 public:
-  CaptiveRequestHandler() {}
+  explicit CaptiveRequestHandler(EvilPortal* portal);
   virtual ~CaptiveRequestHandler() {}
 
   bool canHandle(AsyncWebServerRequest *request) { return true; }
-
-  void handleRequest(AsyncWebServerRequest *request) {
-    #ifdef HAS_PSRAM
-      if (index_html == nullptr) {
-        request->send(503, "text/plain", "Portal content is not loaded");
-        return;
-      }
-      request->send(200, "text/html", index_html);
-    #else
-      request->send_P(200, "text/html", index_html);
-    #endif
-  }
+  void handleRequest(AsyncWebServerRequest *request);
 };
 
 class EvilPortal {
@@ -120,7 +114,16 @@ class EvilPortal {
     int target_ap_index = -1;
     uint8_t target_ap_channel = 1;
     uint8_t target_wifi_generation = WIFI_GENERATION_6;
+    uint8_t target_ap_bssid[6] = {};
+    bool target_ap_bssid_valid = false;
+    uint8_t runtime_softap_bssid[6] = {};
+    uint8_t original_softap_bssid[6] = {};
+    bool softap_bssid_overridden = false;
     int session_credential_count = 0;
+    volatile uint32_t portal_request_count = 0;
+    volatile uint32_t last_portal_request_ms = 0;
+    volatile bool client_has_portal_activity = false;
+    uint8_t last_client_count = 0;
 
     DNSServer dnsServer;
 
@@ -131,6 +134,11 @@ class EvilPortal {
     void setupServer();
     bool startPortal();
     bool startAP();
+    bool applyTargetBSSID();
+    void restoreOriginalBSSID();
+    void servePortalPage(AsyncWebServerRequest* request);
+    void notePortalRequest();
+    void updateClientState();
     void sendToDisplay(String msg);
     void loadCredentials();
     bool storeCredential(const String& username, const String& password);
@@ -153,6 +161,9 @@ class EvilPortal {
     int getSessionCredentialCount();
     const PortalCredential* getSessionCredential(int index);
     uint8_t getConnectedClientCount();
+    uint32_t getPortalRequestCount() const;
+    uint32_t getLastPortalRequestMs() const;
+    bool hasPortalActivity() const;
     bool isRunning() const;
     bool clearCredentials();
     String get_user_name();
@@ -160,7 +171,8 @@ class EvilPortal {
     bool setAP(String essid);
     bool setAPFromConfig();
     void setTargetAP(int index, uint8_t channel,
-                     uint8_t wifi_generation = WIFI_GENERATION_6);
+                     uint8_t wifi_generation = WIFI_GENERATION_6,
+                     const uint8_t* bssid = nullptr);
     int getTargetAPIndex() const;
     uint8_t getTargetAPChannel() const;
     void setup();
@@ -168,6 +180,8 @@ class EvilPortal {
     bool begin(LinkedList<ssid>* ssids, LinkedList<AccessPoint>* access_points);
     void main(uint8_t scan_mode);
     void setHtmlFromSerial();
+
+    friend class CaptiveRequestHandler;
 
 };
 

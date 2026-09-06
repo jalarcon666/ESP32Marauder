@@ -1710,7 +1710,8 @@ void CommandLine::runCommand(String input) {
             AccessPoint new_ap = access_points->get(target_ap_index);
             if (evil_portal_obj.setAP(new_ap.essid))
               evil_portal_obj.setTargetAP(target_ap_index, new_ap.channel,
-                                          new_ap.wifi_generation);
+                                          new_ap.wifi_generation,
+                                          new_ap.bssid);
           }
         }
       }

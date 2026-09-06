@@ -35,7 +35,8 @@ constexpr uint16_t MINI_MENU_REPEAT_DELAY_MS = 450;
 constexpr uint16_t MINI_MENU_REPEAT_INTERVAL_MS = 120;
 constexpr uint16_t MINI_UI_SURFACE = 0x18E3;
 constexpr uint16_t MINI_UI_BORDER = 0x31A6;
-constexpr uint16_t MINI_UI_ACCENT = 0x733F;
+// RGB565 representation of #D3A729 (R=211, G=167, B=41).
+constexpr uint16_t MINI_UI_ACCENT = 0xD525;
 constexpr uint16_t MINI_UI_SELECTED = 0x03E0;  // Dark green with readable white text.
 constexpr uint16_t MINI_UI_TEXT = TFT_WHITE;
 constexpr uint16_t MINI_UI_MUTED = 0xA514;
@@ -2451,7 +2452,7 @@ bool MenuFunctions::startEvilPortalForSSIDGroup(const String& group_name) {
     return false;
   }
   evil_portal_obj.setTargetAP(anchor_index, anchor.channel,
-                              anchor.wifi_generation);
+                              anchor.wifi_generation, anchor.bssid);
 
   // The grouped selector can contain dozens of MenuNodes, each with a String
   // and capturing std::function. None of those nodes are needed while the

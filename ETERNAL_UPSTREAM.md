@@ -53,6 +53,17 @@ not copied because this fork already owns those deployment layers.
   round-robins every selected BSSID, including targets on both 2.4 and 5 GHz,
   then returns the single C5 radio to the portal anchor channel. Deauth pauses
   while a portal client is associated so the captive session remains usable.
+- Evil Portal mirrors the scanned anchor BSSID exactly when concurrent deauth
+  is disabled. With EP deauth enabled it uses a deterministic locally
+  administered BSSID derived from the anchor: transmitting deauth frames for
+  an exact shared BSSID would otherwise identify and disconnect the portal
+  itself. The runtime BSSID and channel are validated before readiness and the
+  original SoftAP MAC is restored during teardown.
+- Captive detection handles the current Android, Apple, Windows, Firefox, and
+  Linux connectivity paths, accepts GET/HEAD-style probes, returns uncached
+  portal content, and advertises the captive URI through DHCP option 114 on the
+  ESP32-C5 core. The live screen distinguishes `DEAUTH`, `WAITING`, `CLIENT`,
+  and confirmed `CAPTIVE` states and displays HTTP request activity.
 - Mini V3 SoftAP modes explicitly restore and verify their protocols after
   raw/LR Wi-Fi modes. The general access point advertises Wi-Fi 6, while Evil
   Portal parses HT/VHT/HE beacon elements and mirrors the selected target's
@@ -66,7 +77,8 @@ not copied because this fork already owns those deployment layers.
 - The supplied 128x128 RGB565 startup artwork replaces the previous Mini V3
   splash. The Mini V3 boot screen omits the version and developer attribution,
   and the root menu intentionally has no Eternal title banner.
-  The Evil Portal HTML selector is colocated with its attack menu.
+  The Evil Portal HTML selector is colocated with its attack menu. The Mini V3
+  cursor/highlight accent is the custom gold `#D3A729` (`0xD525` in RGB565).
 - Rick Roll and Funny SSID use valid-length beacon frames, locally administered
   unicast source addresses, unique sequence numbers, accepted-TX accounting,
   bounded queue backoff, and one-second dwell across channels 1, 6, and 11.

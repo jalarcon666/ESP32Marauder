@@ -6,6 +6,7 @@
 #include "BLEFlockDetector.h"
 #include "WiFiFlockDetector.h"
 #include "MiniV3WiFi6.h"
+#include "EvilPortalStatus.h"
 #include "lang_var.h"
 
 #if defined(MARAUDER_MINI_V3) && defined(HAS_BUTTONS)
@@ -3661,9 +3662,14 @@ void WiFiScan::drawEvilPortalStatus() {
     char attempts[12] = {};
     char accepted[12] = {};
     char failures[12] = {};
+    char portal_requests[12] = {};
     formatCompactCount(this->deauth_tx_attempts, attempts, sizeof(attempts));
     formatCompactCount(this->deauth_tx_accepted, accepted, sizeof(accepted));
     formatCompactCount(this->deauth_tx_failures, failures, sizeof(failures));
+    formatCompactCount(evil_portal_obj.getPortalRequestCount(),
+                       portal_requests, sizeof(portal_requests));
+    const EvilPortalPhase portal_phase = evilPortalPhase(
+        this->ep_deauth, clients, evil_portal_obj.hasPortalActivity());
 
     display_obj.tft.setTextWrap(false);
     display_obj.tft.setFreeFont(NULL);
@@ -3687,11 +3693,23 @@ void WiFiScan::drawEvilPortalStatus() {
         color = TFT_CYAN;
       }
       else if (logical_line == 2) {
-        const char* deauth_state = !this->ep_deauth ? "OFF" :
-                                   (clients > 0 ? "PAUSED" : "ACTIVE");
-        snprintf(line, sizeof(line), "EPdeauth:%s", deauth_state);
-        color = !this->ep_deauth ? TFT_DARKGREY :
-                (clients > 0 ? TFT_YELLOW : TFT_GREEN);
+        snprintf(line, sizeof(line), "State:%s",
+                 evilPortalPhaseLabel(portal_phase));
+        switch (portal_phase) {
+          case EvilPortalPhase::Deauth:
+            color = TFT_ORANGE;
+            break;
+          case EvilPortalPhase::Client:
+            color = TFT_YELLOW;
+            break;
+          case EvilPortalPhase::Captive:
+            color = TFT_GREEN;
+            break;
+          case EvilPortalPhase::Waiting:
+          default:
+            color = TFT_CYAN;
+            break;
+        }
       }
       else if (logical_line == 3) {
         if (!this->ep_deauth)
@@ -3749,12 +3767,8 @@ void WiFiScan::drawEvilPortalStatus() {
         color = !this->ep_deauth ? TFT_DARKGREY : TFT_YELLOW;
       }
       else if (logical_line == 9) {
-        if (clients > 0)
-          snprintf(line, sizeof(line), "Cli:%u ON Capt:%d", clients,
-                   credential_count);
-        else
-          snprintf(line, sizeof(line), "Cli:0 NONE Capt:%d",
-                   credential_count);
+        snprintf(line, sizeof(line), "C:%u HTTP:%s Cap:%d", clients,
+                 portal_requests, credential_count);
         color = clients > 0 ? TFT_GREEN : TFT_CYAN;
       }
       else {

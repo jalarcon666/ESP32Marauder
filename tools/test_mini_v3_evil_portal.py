@@ -56,10 +56,51 @@ class MiniV3EvilPortalTests(unittest.TestCase):
         self.assertNotIn("access_point.essid != group_name", function)
         self.assertIn("evil_portal_obj.setTargetAP", function)
 
-    def test_status_exposes_client_pause(self):
+    def test_status_exposes_portal_handoff_phases(self):
         source = WIFI_SCAN.read_text(encoding="utf-8")
-        self.assertIn('clients > 0 ? "PAUSED" : "ACTIVE"', source)
+        status = (ROOT / "esp32_marauder" / "EvilPortalStatus.h").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("evilPortalPhase(", source)
+        self.assertIn('return "DEAUTH";', status)
+        self.assertIn('return "WAITING";', status)
+        self.assertIn('return "CLIENT";', status)
+        self.assertIn('return "CAPTIVE";', status)
         self.assertIn('"Paused: client on AP"', source)
+
+    def test_captive_detection_covers_current_platform_probes(self):
+        portal = EVIL_PORTAL.read_text(encoding="utf-8")
+        for endpoint in (
+            "/hotspot-detect.html",
+            "/generate_204",
+            "/connectivitycheck/generate_204",
+            "/ncsi.txt",
+            "/connecttest.txt",
+            "/canonical.html",
+            "/fwlink",
+        ):
+            self.assertIn(f'"{endpoint}"', portal)
+        self.assertIn('server.on("/", HTTP_ANY', portal)
+        self.assertIn('response->addHeader("Cache-Control"', portal)
+        self.assertIn("this->notePortalRequest();", portal)
+        self.assertIn("WiFi.AP.enableDhcpCaptivePortal()", portal)
+
+    def test_scanned_target_bssid_is_cloned_and_restored(self):
+        portal = EVIL_PORTAL.read_text(encoding="utf-8")
+        menu = (ROOT / "esp32_marauder" / "MenuFunctions.cpp").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("esp_wifi_set_mac(WIFI_IF_AP, this->runtime_softap_bssid)", portal)
+        self.assertIn('loadSetting<bool>("EPDeauth")', portal)
+        self.assertIn("this->runtime_softap_bssid[5] ^= 0x01", portal)
+        self.assertIn("this->restoreOriginalBSSID();", portal)
+        self.assertIn("anchor.wifi_generation, anchor.bssid", menu)
+
+    def test_mini_v3_menu_uses_requested_gold_highlight(self):
+        menu = (ROOT / "esp32_marauder" / "MenuFunctions.cpp").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("MINI_UI_ACCENT = 0xD525", menu)
 
     def test_mini_v3_softaps_require_verified_wifi6(self):
         portal = EVIL_PORTAL.read_text(encoding="utf-8")

