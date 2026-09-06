@@ -140,9 +140,6 @@ static void drawMarauderEternalSplash() {
 
     drawSplashText("ESP32 MARAUDER", TFT_WIDTH / 2, 1, TFT_WHITE);
     drawSplashText("ETERNAL", TFT_WIDTH / 2, 11, 0x733F);
-    drawSplashText("Version " MARAUDER_VERSION, TFT_WIDTH / 2, 95, TFT_WHITE);
-    drawSplashText("JustCallMeKoKo/", TFT_WIDTH / 2, 106, TFT_LIGHTGREY);
-    drawSplashText("n0vajay05", TFT_WIDTH / 2, 116, TFT_LIGHTGREY);
   #else
     #if defined(MARAUDER_CARDPUTER) || defined(MARAUDER_CARDPUTER_ADV)
       const int16_t splash_center_x = TFT_HEIGHT / 2;

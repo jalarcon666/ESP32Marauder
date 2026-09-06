@@ -22,6 +22,23 @@ class MiniV3LogoAndBeaconTests(unittest.TestCase):
         self.assertIn('#include "MiniV3SplashLogo.h"', wrapper)
         self.assertIn("#define marauder_eternal_splash mk_signal", wrapper)
 
+    def test_mini_startup_and_main_menu_hide_attribution(self):
+        sketch = (FIRMWARE / "esp32_marauder.ino").read_text(encoding="utf-8")
+        menu = (FIRMWARE / "MenuFunctions.cpp").read_text(encoding="utf-8")
+        mini_start = sketch.index("#ifdef MARAUDER_MINI_V3")
+        mini_end = sketch.index("#else", mini_start)
+        mini_splash = sketch[mini_start:mini_end]
+        self.assertNotIn('drawSplashText("Version " MARAUDER_VERSION', mini_splash)
+        self.assertNotIn("JustCallMeKoKo", mini_splash)
+        self.assertNotIn("n0vajay05", mini_splash)
+        self.assertEqual(
+            menu.count('current_menu == &mainMenu ? "" : current_menu->name'),
+            2,
+        )
+        self.assertNotIn(
+            'current_menu == &mainMenu ? "Marauder Eternal"', menu
+        )
+
     def test_html_selector_lives_under_evil_portal_only(self):
         source = (FIRMWARE / "MenuFunctions.cpp").read_text(encoding="utf-8")
         evil_start = source.index("evilPortalMenu.parentMenu")

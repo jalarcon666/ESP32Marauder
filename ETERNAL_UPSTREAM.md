@@ -64,7 +64,9 @@ not copied because this fork already owns those deployment layers.
 - The Mini V3 interface layer, bounded menu viewport, active-scan screens, and
   TX health display remain enabled alongside the Eternal 1.15.5 menus.
 - The supplied 128x128 RGB565 startup artwork replaces the previous Mini V3
-  splash, and the Evil Portal HTML selector is colocated with its attack menu.
+  splash. The Mini V3 boot screen omits the version and developer attribution,
+  and the root menu intentionally has no Eternal title banner.
+  The Evil Portal HTML selector is colocated with its attack menu.
 - Rick Roll and Funny SSID use valid-length beacon frames, locally administered
   unicast source addresses, unique sequence numbers, accepted-TX accounting,
   bounded queue backoff, and one-second dwell across channels 1, 6, and 11.
@@ -86,7 +88,7 @@ not copied because this fork already owns those deployment layers.
 - Mini V3 builds use Arduino ESP32 core 3.3.4, DIO at 80 MHz, an 8 MB flash
   image, and offsets `0x2000`, `0x8000`, `0xe000`, and `0x10000`.
 - The imported firmware source was compiled for ESP32-C5, the raw-frame wrapper
-  was verified in the linker map, all 61 repository tests passed, and the
+  was verified in the linker map, all 62 repository tests passed, and the
   resulting application image checksum and validation hash were accepted by
   `esptool`.
 

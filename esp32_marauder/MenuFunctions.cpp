@@ -6069,7 +6069,7 @@ bool MenuFunctions::renderCurrentMenu(TFT_eSPI& target)
   target.setTextSize(1);
   target.setTextWrap(false);
 
-  String mini_title = current_menu == &mainMenu ? "Marauder Eternal" : current_menu->name;
+  String mini_title = current_menu == &mainMenu ? "" : current_menu->name;
   mini_title.trim();
   if (mini_title.length() > 20)
     mini_title = mini_title.substring(0, 18) + "..";
@@ -6138,7 +6138,7 @@ void MenuFunctions::displayCurrentMenu(int start_index)
   //Serial.println(F("Displaying current menu..."));
   display_obj.clearScreen();
   #ifdef MARAUDER_MINI_V3
-    String mini_title = current_menu == &mainMenu ? "Marauder Eternal" : current_menu->name;
+    String mini_title = current_menu == &mainMenu ? "" : current_menu->name;
     mini_title.trim();
     if (mini_title.length() > 20)
       mini_title = mini_title.substring(0, 18) + "..";
