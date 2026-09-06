@@ -22,7 +22,7 @@ class MiniV3LogoAndBeaconTests(unittest.TestCase):
         self.assertIn('#include "MiniV3SplashLogo.h"', wrapper)
         self.assertIn("#define marauder_eternal_splash mk_signal", wrapper)
 
-    def test_mini_startup_and_main_menu_hide_attribution(self):
+    def test_mini_startup_hides_attribution_and_main_menu_uses_port_name(self):
         sketch = (FIRMWARE / "esp32_marauder.ino").read_text(encoding="utf-8")
         menu = (FIRMWARE / "MenuFunctions.cpp").read_text(encoding="utf-8")
         mini_start = sketch.index("#ifdef MARAUDER_MINI_V3")
@@ -37,9 +37,10 @@ class MiniV3LogoAndBeaconTests(unittest.TestCase):
         self.assertNotIn("JustCallMeKoKo", mini_splash)
         self.assertNotIn("n0vajay05", mini_splash)
         self.assertEqual(
-            menu.count('current_menu == &mainMenu ? "" : current_menu->name'),
+            menu.count('current_menu == &mainMenu ? "Marauder Mini V3" :'),
             2,
         )
+        self.assertNotIn('current_menu == &mainMenu ? ""', menu)
         self.assertNotIn(
             'current_menu == &mainMenu ? "Marauder Eternal"', menu
         )
