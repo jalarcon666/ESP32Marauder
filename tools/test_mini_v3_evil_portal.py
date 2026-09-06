@@ -90,11 +90,26 @@ class MiniV3EvilPortalTests(unittest.TestCase):
         menu = (ROOT / "esp32_marauder" / "MenuFunctions.cpp").read_text(
             encoding="utf-8"
         )
-        self.assertIn("esp_wifi_set_mac(WIFI_IF_AP, this->runtime_softap_bssid)", portal)
+        self.assertIn(
+            "esp_iface_mac_addr_set(this->runtime_softap_bssid,", portal
+        )
+        self.assertIn("ESP_MAC_WIFI_SOFTAP", portal)
         self.assertIn('loadSetting<bool>("EPDeauth")', portal)
         self.assertIn("this->runtime_softap_bssid[5] ^= 0x01", portal)
         self.assertIn("this->restoreOriginalBSSID();", portal)
         self.assertIn("anchor.wifi_generation, anchor.bssid", menu)
+
+    def test_bssid_is_applied_before_wifi_driver_startup(self):
+        portal = EVIL_PORTAL.read_text(encoding="utf-8")
+        start = portal.index("bool EvilPortal::startAP()")
+        end = portal.index("bool EvilPortal::startPortal()", start)
+        start_ap = portal[start:end]
+        self.assertLess(
+            start_ap.index("this->applyTargetBSSID()"),
+            start_ap.index("WiFi.mode(WIFI_AP)"),
+        )
+        self.assertNotIn("WiFi.mode(WIFI_STA)", start_ap)
+        self.assertIn("WiFi.mode(WIFI_OFF)", start_ap)
 
     def test_mini_v3_menu_uses_requested_gold_highlight(self):
         menu = (ROOT / "esp32_marauder" / "MenuFunctions.cpp").read_text(

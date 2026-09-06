@@ -68,7 +68,9 @@ not copied because this fork already owns those deployment layers.
   raw/LR Wi-Fi modes. The general access point advertises Wi-Fi 6, while Evil
   Portal parses HT/VHT/HE beacon elements and mirrors the selected target's
   Wi-Fi generation; an AX target therefore always produces an AX portal AP.
-  Startup fails visibly instead of silently falling back on a driver mismatch.
+  Its target-derived BSSID is installed before the C5 Wi-Fi driver starts and
+  restored only after shutdown, avoiding STA/AP mode races. Startup fails
+  visibly instead of silently falling back on a driver mismatch.
 
 ### Fork functionality retained
 

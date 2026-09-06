@@ -4,6 +4,7 @@
 #if defined(MARAUDER_MINI_V3) && defined(ARDUINO_ESP32C5_DEV)
   #include "esp_err.h"
   #include "esp_idf_version.h"
+  #include "esp_mac.h"
   #include "esp_wifi.h"
 #endif
 
@@ -694,8 +695,12 @@ bool EvilPortal::applyTargetBSSID() {
     if (!this->target_ap_bssid_valid)
       return true;
 
-    esp_err_t status = esp_wifi_get_mac(WIFI_IF_AP,
-                                        this->original_softap_bssid);
+    // Configure the per-interface identity before Arduino initializes the
+    // Wi-Fi driver. esp_wifi_set_mac(WIFI_IF_AP, ...) rejects STA-only mode
+    // with ESP_ERR_WIFI_MODE, while esp_iface_mac_addr_set() is specifically
+    // designed to override the MAC used when that interface is created.
+    esp_err_t status = esp_read_mac(this->original_softap_bssid,
+                                    ESP_MAC_WIFI_SOFTAP);
     if (status != ESP_OK) {
       Serial.printf("Evil Portal could not read the SoftAP BSSID: %s\n",
                     esp_err_to_name(status));
@@ -720,7 +725,8 @@ bool EvilPortal::applyTargetBSSID() {
         this->runtime_softap_bssid[5] ^= 0x02;
     }
 
-    status = esp_wifi_set_mac(WIFI_IF_AP, this->runtime_softap_bssid);
+    status = esp_iface_mac_addr_set(this->runtime_softap_bssid,
+                                    ESP_MAC_WIFI_SOFTAP);
     if (status != ESP_OK) {
       Serial.printf("Evil Portal could not set the portal BSSID: %s\n",
                     esp_err_to_name(status));
@@ -745,20 +751,19 @@ void EvilPortal::restoreOriginalBSSID() {
     if (!this->softap_bssid_overridden)
       return;
 
-    // esp_wifi_set_mac() requires the target interface to be disabled. Move
-    // briefly to STA-only mode before restoring the runtime SoftAP identity;
-    // generic teardown turns Wi-Fi fully off immediately afterwards.
-    wifi_mode_t mode = WIFI_MODE_NULL;
-    if (esp_wifi_get_mode(&mode) == ESP_OK &&
-        (mode & WIFI_MODE_AP) != 0 && !WiFi.mode(WIFI_STA)) {
-      Serial.println(F("Evil Portal could not disable AP before BSSID restore"));
+    // The custom interface address must be restored while the Wi-Fi driver is
+    // down so that the next workflow starts with the device's original AP MAC.
+    if (!WiFi.mode(WIFI_OFF)) {
+      Serial.println(F("Evil Portal could not stop Wi-Fi before BSSID restore"));
       return;
     }
-    const esp_err_t status = esp_wifi_set_mac(WIFI_IF_AP,
-                                              this->original_softap_bssid);
-    if (status != ESP_OK)
+    const esp_err_t status = esp_iface_mac_addr_set(
+        this->original_softap_bssid, ESP_MAC_WIFI_SOFTAP);
+    if (status != ESP_OK) {
       Serial.printf("Evil Portal could not restore the SoftAP BSSID: %s\n",
                     esp_err_to_name(status));
+      return;
+    }
   #endif
   this->softap_bssid_overridden = false;
 }
@@ -766,14 +771,14 @@ void EvilPortal::restoreOriginalBSSID() {
 bool EvilPortal::startAP() {
   const IPAddress AP_IP(172, 0, 0, 1);
 
-  // Initialize the Arduino Wi-Fi owner with AP disabled. ESP-IDF only permits
-  // assigning an interface MAC while that interface is disabled.
-  if (!WiFi.mode(WIFI_STA)) {
-    Serial.println(F("Evil Portal could not initialize Wi-Fi"));
+  // applyTargetBSSID() configures the AP identity before the Arduino wrapper
+  // creates either Wi-Fi interface. This avoids addressing WIFI_IF_AP while
+  // the driver is in STA-only mode on ESP32-C5/IDF 5.5.
+  if (!WiFi.mode(WIFI_OFF)) {
+    Serial.println(F("Evil Portal could not reset Wi-Fi before startup"));
     return false;
   }
   if (!this->applyTargetBSSID()) {
-    WiFi.mode(WIFI_OFF);
     return false;
   }
   if (!WiFi.mode(WIFI_AP)) {
