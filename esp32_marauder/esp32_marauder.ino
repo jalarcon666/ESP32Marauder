@@ -124,6 +124,21 @@ static void drawSplashText(const String& text, int16_t center_x, int16_t y,
   display_obj.tft.drawCentreString(text, center_x, y, font);
 }
 
+#ifdef MARAUDER_MINI_V3
+static void drawMiniV3SplashTitle(const char* text, int16_t y,
+                                  uint16_t color) {
+  constexpr int16_t glyph_advance = 5;
+  int16_t length = 0;
+  while (text[length] != '\0') length++;
+
+  const int16_t start_x = (TFT_WIDTH - (length * glyph_advance)) / 2;
+  for (int16_t i = 0; i < length; i++) {
+    display_obj.tft.drawChar(start_x + (i * glyph_advance), y,
+                             text[i], color, color, 1);
+  }
+}
+#endif
+
 static void drawMarauderEternalSplash() {
   display_obj.tft.fillScreen(TFT_BLACK);
   display_obj.tft.setTextWrap(false);
@@ -138,8 +153,7 @@ static void drawMarauderEternalSplash() {
                               marauder_eternal_splash);
     display_obj.tft.setSwapBytes(false);
 
-    drawSplashText("ESP32 MARAUDER", TFT_WIDTH / 2, 1, TFT_WHITE);
-    drawSplashText("ETERNAL", TFT_WIDTH / 2, 11, 0x733F);
+    drawMiniV3SplashTitle("ESP32 MARAUDER MINI V3", 1, TFT_WHITE);
   #else
     #if defined(MARAUDER_CARDPUTER) || defined(MARAUDER_CARDPUTER_ADV)
       const int16_t splash_center_x = TFT_HEIGHT / 2;

@@ -28,6 +28,11 @@ class MiniV3LogoAndBeaconTests(unittest.TestCase):
         mini_start = sketch.index("#ifdef MARAUDER_MINI_V3")
         mini_end = sketch.index("#else", mini_start)
         mini_splash = sketch[mini_start:mini_end]
+        self.assertIn(
+            'drawMiniV3SplashTitle("ESP32 MARAUDER MINI V3", 1, TFT_WHITE)',
+            mini_splash,
+        )
+        self.assertNotIn('drawSplashText("ETERNAL"', mini_splash)
         self.assertNotIn('drawSplashText("Version " MARAUDER_VERSION', mini_splash)
         self.assertNotIn("JustCallMeKoKo", mini_splash)
         self.assertNotIn("n0vajay05", mini_splash)

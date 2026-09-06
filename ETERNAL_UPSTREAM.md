@@ -75,8 +75,9 @@ not copied because this fork already owns those deployment layers.
 - The Mini V3 interface layer, bounded menu viewport, active-scan screens, and
   TX health display remain enabled alongside the Eternal 1.15.5 menus.
 - The supplied 128x128 RGB565 startup artwork replaces the previous Mini V3
-  splash. The Mini V3 boot screen omits the version and developer attribution,
-  and the root menu intentionally has no Eternal title banner.
+  splash. Its only heading is the single-line `ESP32 MARAUDER MINI V3`; the
+  boot screen omits Eternal, the version, and developer attribution, and the
+  root menu intentionally has no Eternal title banner.
   The Evil Portal HTML selector is colocated with its attack menu. The Mini V3
   cursor/highlight accent is the custom gold `#D3A729` (`0xD525` in RGB565).
 - Rick Roll and Funny SSID use valid-length beacon frames, locally administered
