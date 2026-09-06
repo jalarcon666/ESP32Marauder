@@ -5,6 +5,7 @@
 #include "WdgResponse.h"
 #include "BLEFlockDetector.h"
 #include "WiFiFlockDetector.h"
+#include "MiniV3WiFi6.h"
 #include "lang_var.h"
 
 #if defined(MARAUDER_MINI_V3) && defined(HAS_BUTTONS)
@@ -2648,6 +2649,14 @@ bool WiFiScan::startWiFi(String ssid, String password, bool gui) {
   WiFi.disconnect(true);
   delay(100);
   WiFi.mode(WIFI_MODE_AP);
+
+  if (!configureMiniV3SoftAPForTarget(1, WIFI_GENERATION_6)) {
+    Serial.println(F("Could not enable Wi-Fi 6 access point"));
+    WiFi.mode(WIFI_OFF);
+    this->wifi_connected = false;
+    this->wifi_initialized = false;
+    return false;
+  }
 
 
   this->setMac();
@@ -5490,6 +5499,8 @@ void WiFiScan::RunLoadAPList() {
       ap.pmf_status = obj.containsKey("pmf") ?
           static_cast<PmfStatus>(obj["pmf"].as<uint8_t>()) :
           PMF_STATUS_UNKNOWN;
+      ap.wifi_generation = obj.containsKey("wifi_generation") ?
+          obj["wifi_generation"].as<uint8_t>() : WIFI_GENERATION_4;
       if (ap.pmf_status > PMF_STATUS_REQUIRED)
         ap.pmf_status = PMF_STATUS_UNKNOWN;
       ap.has_msg_1 = false;
@@ -5536,6 +5547,7 @@ void WiFiScan::RunSaveAPList(bool save_as) {
         jsonAp["wps"] = ap.wps;
         jsonAp["man"] = ap.man;
         jsonAp["pmf"] = static_cast<uint8_t>(ap.pmf_status);
+        jsonAp["wifi_generation"] = ap.wifi_generation;
         JsonArray sta_array = jsonAp["stations"].to<JsonArray>();
 
         if (ap.stations == nullptr)
@@ -9077,6 +9089,8 @@ void WiFiScan::apSnifferCallbackFull(void* buf, wifi_promiscuous_pkt_type_t type
           ap.sec = security_type;
           ap.pmf_status = parsePmfStatus(snifferPacket->payload + 36,
                                          static_cast<size_t>(len - 36));
+          ap.wifi_generation = detectWiFiGeneration(
+              snifferPacket->payload + 36, static_cast<size_t>(len - 36));
 
           ap.wps = wps;
 
@@ -12306,6 +12320,8 @@ void WiFiScan::eapolSnifferCallback(void* buf, wifi_promiscuous_pkt_type_t type)
         ap.sec = security_type;
         ap.pmf_status = parsePmfStatus(snifferPacket->payload + 36,
                                        static_cast<size_t>(len - 36));
+        ap.wifi_generation = detectWiFiGeneration(
+            snifferPacket->payload + 36, static_cast<size_t>(len - 36));
         ap.wps = false;
         ap.packets = 0;
         access_points->add(ap);

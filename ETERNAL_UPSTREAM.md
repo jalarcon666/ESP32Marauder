@@ -52,6 +52,11 @@ not copied because this fork already owns those deployment layers.
   allows DHCP/DNS/HTTP a startup grace period, and scopes optional lab deauth to
   the selected anchor BSSID. Deauth pauses while a portal client is associated
   so the single C5 radio remains available for the captive session.
+- Mini V3 SoftAP modes explicitly restore and verify their protocols after
+  raw/LR Wi-Fi modes. The general access point advertises Wi-Fi 6, while Evil
+  Portal parses HT/VHT/HE beacon elements and mirrors the selected target's
+  Wi-Fi generation; an AX target therefore always produces an AX portal AP.
+  Startup fails visibly instead of silently falling back on a driver mismatch.
 
 ### Fork functionality retained
 
@@ -75,7 +80,7 @@ not copied because this fork already owns those deployment layers.
 - Mini V3 builds use Arduino ESP32 core 3.3.4, DIO at 80 MHz, an 8 MB flash
   image, and offsets `0x2000`, `0x8000`, `0xe000`, and `0x10000`.
 - The imported firmware source was compiled for ESP32-C5, the raw-frame wrapper
-  was verified in the linker map, all 50 repository tests passed, and the
+  was verified in the linker map, all 56 repository tests passed, and the
   resulting application image checksum and validation hash were accepted by
   `esptool`.
 

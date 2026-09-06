@@ -11,6 +11,7 @@
 #include "configs.h"
 #include "settings.h"
 #include "RsnCapabilities.h"
+#include "MiniV3WiFi6.h"
 #ifdef HAS_SCREEN
   #include "Display.h"
   #include <LinkedList.h>
@@ -67,6 +68,9 @@ struct AccessPoint {
   uint8_t sec;
   bool wps;
   String man;
+  // Wi-Fi 4 is the conservative fallback for manually added or legacy saved
+  // entries; live beacon scans replace it with the detected generation.
+  uint8_t wifi_generation = WIFI_GENERATION_4;
   bool has_msg_1;
   bool has_msg_2;
   bool has_msg_3;
@@ -115,6 +119,7 @@ class EvilPortal {
     bool has_html;
     int target_ap_index = -1;
     uint8_t target_ap_channel = 1;
+    uint8_t target_wifi_generation = WIFI_GENERATION_6;
     int session_credential_count = 0;
 
     DNSServer dnsServer;
@@ -154,7 +159,8 @@ class EvilPortal {
     String get_password();
     bool setAP(String essid);
     bool setAPFromConfig();
-    void setTargetAP(int index, uint8_t channel);
+    void setTargetAP(int index, uint8_t channel,
+                     uint8_t wifi_generation = WIFI_GENERATION_6);
     int getTargetAPIndex() const;
     uint8_t getTargetAPChannel() const;
     void setup();

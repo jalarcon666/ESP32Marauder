@@ -1,4 +1,5 @@
 #include "EvilPortal.h"
+#include "MiniV3WiFi6.h"
 
 char apName[MAX_AP_NAME_SIZE] = "PORTAL";
 
@@ -525,7 +526,8 @@ bool EvilPortal::setAP(LinkedList<ssid>* ssids, LinkedList<AccessPoint>* access_
     Serial.println(F("ap config set"));
     if (targ_ap_index >= 0 && targ_ap_index < access_points->size())
       this->setTargetAP(targ_ap_index,
-                        access_points->get(targ_ap_index).channel);
+                        access_points->get(targ_ap_index).channel,
+                        access_points->get(targ_ap_index).wifi_generation);
     else
       this->setTargetAP(-1, 1);
     return true;
@@ -578,15 +580,18 @@ bool EvilPortal::setAP(String essid) {
   return true;
 }
 
-void EvilPortal::setTargetAP(int index, uint8_t channel) {
+void EvilPortal::setTargetAP(int index, uint8_t channel,
+                             uint8_t wifi_generation) {
   if (index < 0 || channel == 0) {
     this->target_ap_index = -1;
     this->target_ap_channel = 1;
+    this->target_wifi_generation = WIFI_GENERATION_6;
     return;
   }
 
   this->target_ap_index = index;
   this->target_ap_channel = channel;
+  this->target_wifi_generation = wifi_generation;
 }
 
 int EvilPortal::getTargetAPIndex() const {
@@ -602,6 +607,12 @@ bool EvilPortal::startAP() {
 
   if (!WiFi.mode(WIFI_AP)) {
     Serial.println(F("Evil Portal could not enable AP mode"));
+    return false;
+  }
+  if (!configureMiniV3SoftAPForTarget(this->target_ap_channel,
+                                      this->target_wifi_generation)) {
+    Serial.println(F("Evil Portal could not mirror target Wi-Fi generation"));
+    WiFi.mode(WIFI_OFF);
     return false;
   }
   if (!WiFi.softAPConfig(AP_IP, AP_IP, IPAddress(255, 255, 255, 0)) ||

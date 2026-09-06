@@ -6,6 +6,7 @@ ROOT = Path(__file__).resolve().parents[1]
 WIFI_SCAN = ROOT / "esp32_marauder" / "WiFiScan.cpp"
 WIFI_SCAN_HEADER = ROOT / "esp32_marauder" / "WiFiScan.h"
 EVIL_PORTAL = ROOT / "esp32_marauder" / "EvilPortal.cpp"
+MINI_V3_WIFI6 = ROOT / "esp32_marauder" / "MiniV3WiFi6.cpp"
 
 
 class MiniV3EvilPortalTests(unittest.TestCase):
@@ -39,6 +40,32 @@ class MiniV3EvilPortalTests(unittest.TestCase):
         source = WIFI_SCAN.read_text(encoding="utf-8")
         self.assertIn('clients > 0 ? "PAUSED" : "ACTIVE"', source)
         self.assertIn('"Paused: client on AP"', source)
+
+    def test_mini_v3_softaps_require_verified_wifi6(self):
+        portal = EVIL_PORTAL.read_text(encoding="utf-8")
+        scan = WIFI_SCAN.read_text(encoding="utf-8")
+        helper = MINI_V3_WIFI6.read_text(encoding="utf-8")
+        self.assertIn(
+            "configureMiniV3SoftAPForTarget(this->target_ap_channel,", portal
+        )
+        self.assertIn(
+            "configureMiniV3SoftAPForTarget(1, WIFI_GENERATION_6)", scan
+        )
+        self.assertIn("esp_wifi_set_protocols(WIFI_IF_AP, &requested)", helper)
+        self.assertIn("esp_wifi_get_protocols(WIFI_IF_AP, &active)", helper)
+        self.assertIn("WIFI_PROTOCOL_11AX", helper)
+        self.assertIn("active_protocols != expected_protocols", helper)
+
+    def test_evil_portal_mirrors_scanned_target_generation(self):
+        portal = EVIL_PORTAL.read_text(encoding="utf-8")
+        scan = WIFI_SCAN.read_text(encoding="utf-8")
+        helper = MINI_V3_WIFI6.read_text(encoding="utf-8")
+        self.assertIn("uint8_t detectWiFiGeneration", helper)
+        self.assertIn("extension_id == 35 || extension_id == 36", helper)
+        self.assertIn("ap.wifi_generation = detectWiFiGeneration(", scan)
+        self.assertIn('obj.containsKey("wifi_generation")', scan)
+        self.assertIn("WIFI_GENERATION_4", scan)
+        self.assertIn("this->target_wifi_generation", portal)
 
 
 if __name__ == "__main__":

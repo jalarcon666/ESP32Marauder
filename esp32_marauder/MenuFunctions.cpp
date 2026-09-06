@@ -2461,7 +2461,8 @@ bool MenuFunctions::startEvilPortalForSSIDGroup(const String& group_name) {
     Serial.println(F("Could not configure Evil Portal SSID"));
     return false;
   }
-  evil_portal_obj.setTargetAP(anchor_index, anchor.channel);
+  evil_portal_obj.setTargetAP(anchor_index, anchor.channel,
+                              anchor.wifi_generation);
 
   // The grouped selector can contain dozens of MenuNodes, each with a String
   // and capturing std::function. None of those nodes are needed while the
