@@ -7,6 +7,18 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class MiniV3HardwareTests(unittest.TestCase):
+    def test_local_build_script_requires_and_verifies_raw_frame_wrapper(self):
+        script = (ROOT / "tools" / "build_mini_v3.ps1").read_text()
+        self.assertIn("--wrap=ieee80211_raw_frame_sanity_check", script)
+        self.assertIn(
+            "ieee80211_raw_frame_sanity_check = "
+            "__wrap_ieee80211_raw_frame_sanity_check",
+            script,
+        )
+        self.assertIn("Select-String", script)
+        self.assertIn("finally", script)
+        self.assertIn("Remove-Item -LiteralPath $partitionTarget", script)
+
     def test_hardware_profile_matches_production_board(self):
         configs = (ROOT / "esp32_marauder" / "configs.h").read_text()
         setup = (ROOT / "User_Setup_marauder_mini_v3.h").read_text()

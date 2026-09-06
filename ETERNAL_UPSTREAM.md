@@ -102,6 +102,10 @@ not copied because this fork already owns those deployment layers.
   and repository-specific workflows are therefore not vendored.
 - Mini V3 builds use Arduino ESP32 core 3.3.4, DIO at 80 MHz, an 8 MB flash
   image, and offsets `0x2000`, `0x8000`, `0xe000`, and `0x10000`.
+- `tools/build_mini_v3.ps1` is the canonical local build entry point. It adds
+  the C5 raw-frame linker wrapper and rejects the result unless the linker map
+  proves that the override is active; omitting this flag makes every deauth TX
+  fail even though the firmware otherwise compiles and starts normally.
 - The imported firmware source was compiled for ESP32-C5, the raw-frame wrapper
   was verified in the linker map, all 62 repository tests passed, and the
   resulting application image checksum and validation hash were accepted by
