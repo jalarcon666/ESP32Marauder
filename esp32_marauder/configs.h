@@ -601,7 +601,7 @@
     //#define HAS_TOUCH
     //#define HAS_FLIPPER_LED
     //#define FLIPPER_ZERO_HAT
-    //#define HAS_BATTERY
+    #define HAS_BATTERY
     #define HAS_BT
     #define HAS_BUTTONS
     //#define HAS_NEOPIXEL_LED
@@ -2908,6 +2908,19 @@
     #elif defined(MARAUDER_V8)
       #define I2C_SCL 4
       #define I2C_SDA 5
+
+    #elif defined(MARAUDER_MINI_V3)
+      // The Mini V3 uses a Maple ESP32-C5 Bet Mini module. Its onboard
+      // MAX17048 is wired to the module's default I2C bus. These pins are
+      // also used by the left/centre switch, so battery reads must be
+      // deferred while either line is held low by the user.
+      #define I2C_SDA 0
+      #define I2C_SCL 1
+      #define HAS_MAX1704X
+      #define BATTERY_I2C_SHARED_BUTTONS
+      #undef HAS_AXP2101
+      #undef HAS_IP5306
+      #undef HAS_AXP192
 
     #elif defined(MARAUDER_REV_FEATHER)
       #define I2C_SCL 4

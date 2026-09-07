@@ -12,6 +12,14 @@ void BatteryInterface::main(uint32_t currentTime) {
     if (currentTime - initTime >= 3000) {
       //Serial.println("Checking Battery Level");
       this->initTime = millis();
+
+      #ifdef BATTERY_I2C_SHARED_BUTTONS
+        // On Mini V3, left and centre temporarily pull SDA/SCL low. Do not
+        // start an I2C transaction while either switch is being held.
+        if ((digitalRead(I2C_SDA) == LOW) || (digitalRead(I2C_SCL) == LOW))
+          return;
+      #endif
+
       int8_t new_level = this->getBatteryLevel();
       //this->battery_level = this->getBatteryLevel();
       if (this->battery_level != new_level) {
@@ -78,6 +86,9 @@ void BatteryInterface::RunSetup() {
               this->i2c_supported = true;
             }
           }
+
+          if (!this->has_max17048)
+            Serial.println(F("Battery: MAX17048 not detected at 0x36"));
         #endif
 
   #endif //  other i2c
@@ -123,6 +134,9 @@ int8_t BatteryInterface::getBatteryLevel() {
     #ifdef HAS_MAX1704X
       if (this->has_max17048) {
         float percent = this->maxlipo.cellPercent();
+
+        if (!isfinite(percent))
+          return this->battery_level;
 
         // Sometimes we dumb
         if (percent >= 100)
