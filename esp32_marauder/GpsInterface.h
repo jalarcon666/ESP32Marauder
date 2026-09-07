@@ -65,6 +65,8 @@ class GpsInterface {
     void setType(String t);
 
     void enqueue(MicroNMEA& nmea);
+    // Borrowed view of the internally owned queue. Call flush_queue() to drain
+    // it; callers must never delete the returned pointer.
     LinkedList<nmea_sentence_t>* get_queue();
     void flush_queue();
     void flush_text();

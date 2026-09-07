@@ -6264,7 +6264,6 @@ void WiFiScan::RunGPSNmea() {
     if(buffer && queue_enabled){
       int size=buffer->size();
       if(size){
-        gps_obj.new_queue();
         for(int i=0;i<size;i++){
           nmea_sentence_t line=buffer->get(i);
           Serial.println(line.sentence);
@@ -6293,7 +6292,11 @@ void WiFiScan::RunGPSNmea() {
             }
           #endif
         }
-        delete buffer;
+        // get_queue() returns a borrowed pointer owned by GpsInterface.
+        // Deleting it left gps_obj.queue dangling and the next completed NMEA
+        // sentence wrote into freed memory, eventually freezing/restarting the
+        // device. Drain the owned queue through its public API instead.
+        gps_obj.flush_queue();
       }
     } else {
       static String old_nmea_sentence="";

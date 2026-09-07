@@ -40,6 +40,16 @@ class MiniV3GpsTests(unittest.TestCase):
         self.assertIn('"  Baud: " + String(gps_obj.getBaudRate())', wifi_scan)
         self.assertIn("gps_obj.getLastSentenceAgeMs()", wifi_scan)
 
+    def test_nmea_stream_never_deletes_the_gps_owned_queue(self):
+        wifi_scan = (ROOT / "esp32_marauder" / "WiFiScan.cpp").read_text()
+        start = wifi_scan.index("void WiFiScan::RunGPSNmea()")
+        end = wifi_scan.index("void WiFiScan::RunAPInfo", start)
+        nmea_stream = wifi_scan[start:end]
+
+        self.assertNotIn("delete buffer", nmea_stream)
+        self.assertNotIn("gps_obj.new_queue();", nmea_stream)
+        self.assertIn("gps_obj.flush_queue();", nmea_stream)
+
 
 if __name__ == "__main__":
     unittest.main()
