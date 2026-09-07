@@ -3,8 +3,7 @@ param(
   [string]$BuildPath = "",
   [string]$ArduinoData = "",
   [string]$ArduinoDownloads = "",
-  [string]$ReferenceLibraries = "",
-  [string]$LocalLibraries = ""
+  [string]$ReferenceLibraries = ""
 )
 
 Set-StrictMode -Version Latest
@@ -24,9 +23,6 @@ if ($ArduinoDownloads -eq "") {
 if ($ReferenceLibraries -eq "") {
   $ReferenceLibraries = Join-Path $workspaceRoot "ReferenceMiniV3\libraries"
 }
-if ($LocalLibraries -eq "") {
-  $LocalLibraries = Join-Path $workspaceRoot ".arduino-mini-v3\libraries"
-}
 
 $partitionSource = Join-Path $repoRoot "installer\partitions\mini_v3.csv"
 $partitionTarget = Join-Path $repoRoot "esp32_marauder\partitions.csv"
@@ -38,10 +34,6 @@ $wrapperAssignment =
 
 if (Test-Path -LiteralPath $partitionTarget) {
   throw "Refusing to overwrite existing partition file: $partitionTarget"
-}
-if (!(Test-Path -LiteralPath (Join-Path $LocalLibraries "Adafruit_MAX1704X")) -or
-    !(Test-Path -LiteralPath (Join-Path $LocalLibraries "Adafruit_BusIO"))) {
-  throw "Mini V3 battery dependencies are missing from $LocalLibraries (Adafruit_MAX1704X 1.0.2 and Adafruit_BusIO 1.15.0)"
 }
 
 New-Item -ItemType Directory -Path $BuildPath -Force | Out-Null
@@ -56,7 +48,6 @@ try {
     --build-property "compiler.c.elf.extra_flags=-Wl,--wrap=ieee80211_raw_frame_sanity_check -Wl,--defsym=ieee80211_raw_frame_sanity_check=__wrap_ieee80211_raw_frame_sanity_check" `
     --libraries $ReferenceLibraries `
     --libraries $repoLibraries `
-    --libraries $LocalLibraries `
     --build-path $BuildPath `
     $sketchPath
 

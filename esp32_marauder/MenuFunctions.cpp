@@ -79,22 +79,6 @@ void drawMiniChevron(int16_t x, int16_t y, uint16_t color) {
   miniUiTft().drawLine(x + 3, y + 3, x, y + 6, color);
 }
 
-void drawMiniBatteryStatus(TFT_eSPI& target, int8_t level, bool detected) {
-  const int8_t bounded_level = constrain(level, 0, 100);
-  const uint16_t color = !detected ? MINI_UI_MUTED :
-                         bounded_level <= 25 ? MINI_UI_DANGER :
-                         bounded_level <= 50 ? TFT_YELLOW : MINI_UI_ACCENT;
-
-  target.fillRect(0, 0, TFT_WIDTH / 4, STATUS_BAR_WIDTH, STATUSBAR_COLOR);
-  target.drawRect(0, 1, 9, 6, color);
-  target.fillRect(9, 3, 2, 2, color);
-  if (detected && bounded_level > 0)
-    target.fillRect(2, 3, max(1, (bounded_level * 5) / 100), 2, color);
-
-  target.setTextColor(color, STATUSBAR_COLOR, true);
-  target.drawString(detected ? String(bounded_level) : "--", 12, 0, 1);
-}
-
 void drawMiniSymbol(uint8_t icon, int16_t cx, int16_t cy, uint16_t color) {
   switch (icon) {
     case WIFI:
@@ -1694,21 +1678,6 @@ void MenuFunctions::battery2(bool initial)
 void MenuFunctions::battery(bool initial)
 {
   #ifdef HAS_BATTERY
-    #ifdef MARAUDER_MINI_V3
-      // Keep the root status bar useful without hiding GPS elsewhere: the
-      // main menu owns the battery slot, submenus retain the GPS indicator.
-      if (current_menu != &mainMenu)
-        return;
-
-      if (initial || (battery_obj.battery_level != battery_obj.old_level)) {
-        battery_obj.old_level = battery_obj.battery_level;
-        drawMiniBatteryStatus(display_obj.tft,
-                              battery_obj.battery_level,
-                              battery_obj.i2c_supported);
-      }
-      return;
-    #endif
-
     uint16_t the_color;
     if (battery_obj.i2c_supported)
     {
@@ -1846,7 +1815,7 @@ void MenuFunctions::updateStatusBar()
   }
 
   // Draw battery info
-  MenuFunctions::battery(status_changed);
+  MenuFunctions::battery(false);
   display_obj.tft.fillRect(186, 0, 16, STATUS_BAR_WIDTH, STATUSBAR_COLOR);
 
   // Disable touch stuff
@@ -6113,29 +6082,9 @@ bool MenuFunctions::renderCurrentMenu(TFT_eSPI& target)
   target.println(mini_title);
 
   // Recreate the Mini V3 status bar from the same state values used by the
-  // live UI: battery on the root menu, GPS fix on every submenu.
+  // live UI. This target has no battery field and represents GPS through its
+  // menus rather than a status-bar glyph.
   target.fillRect(0, 0, SCREEN_WIDTH, STATUS_BAR_WIDTH, STATUSBAR_COLOR);
-  #if defined(HAS_BATTERY) && defined(HAS_GPS)
-    if (current_menu == &mainMenu) {
-      drawMiniBatteryStatus(target,
-                            battery_obj.battery_level,
-                            battery_obj.i2c_supported);
-    }
-    else if (gps_obj.getFixStatus()) {
-      target.setTextColor(TFT_GREEN, STATUSBAR_COLOR, true);
-      target.drawString("GPS", 0, 0, 1);
-    }
-  #elif defined(HAS_BATTERY)
-    if (current_menu == &mainMenu)
-      drawMiniBatteryStatus(target,
-                            battery_obj.battery_level,
-                            battery_obj.i2c_supported);
-  #elif defined(HAS_GPS)
-    if (current_menu != &mainMenu && gps_obj.getFixStatus()) {
-      target.setTextColor(TFT_GREEN, STATUSBAR_COLOR, true);
-      target.drawString("GPS", 0, 0, 1);
-    }
-  #endif
   target.setTextColor(TFT_WHITE, STATUSBAR_COLOR);
   target.drawString("CH:" + String(wifi_scan_obj.old_channel), TFT_WIDTH / 4, 0, 1);
 

@@ -18,9 +18,6 @@ class MiniV3HardwareTests(unittest.TestCase):
         self.assertIn("Select-String", script)
         self.assertIn("finally", script)
         self.assertIn("Remove-Item -LiteralPath $partitionTarget", script)
-        self.assertIn("Adafruit_MAX1704X 1.0.2", script)
-        self.assertIn("Adafruit_BusIO 1.15.0", script)
-        self.assertIn("--libraries $LocalLibraries", script)
 
     def test_hardware_profile_matches_production_board(self):
         configs = (ROOT / "esp32_marauder" / "configs.h").read_text()
@@ -58,35 +55,6 @@ class MiniV3HardwareTests(unittest.TestCase):
         self.assertIn('MARAUDER_MINI_V3 requires the ESP32-C5 board target', configs)
         self.assertIn('Six modern menu cards fit', configs)
         self.assertIn('#define BUTTON_SCREEN_LIMIT 6', configs)
-
-        board_features = configs.index("//// BOARD FEATURES")
-        mini_start = configs.index("#ifdef MARAUDER_MINI_V3", board_features)
-        mini_end = configs.index("#endif", mini_start)
-        mini_features = configs[mini_start:mini_end]
-        self.assertIn("#define HAS_BATTERY", mini_features)
-
-        battery_features = configs.index("//// BATTERY STUFF")
-        mini_battery_start = configs.index(
-            "#elif defined(MARAUDER_MINI_V3)", battery_features
-        )
-        mini_battery_end = configs.index("#elif", mini_battery_start + 1)
-        mini_battery = configs[mini_battery_start:mini_battery_end]
-        for definition in (
-            "#define I2C_SDA 0",
-            "#define I2C_SCL 1",
-            "#define HAS_MAX1704X",
-            "#define BATTERY_I2C_SHARED_BUTTONS",
-        ):
-            self.assertIn(definition, mini_battery)
-
-        battery = (ROOT / "esp32_marauder" / "BatteryInterface.cpp").read_text()
-        menu = (ROOT / "esp32_marauder" / "MenuFunctions.cpp").read_text()
-        self.assertIn("digitalRead(I2C_SDA) == LOW", battery)
-        self.assertIn("digitalRead(I2C_SCL) == LOW", battery)
-        self.assertIn("Battery: MAX17048 not detected at 0x36", battery)
-        self.assertIn("drawMiniBatteryStatus", menu)
-        self.assertIn("if (current_menu != &mainMenu)", menu)
-        self.assertIn("else if (gps_obj.getFixStatus())", menu)
 
     def test_custom_partition_layout_is_wired_into_every_build(self):
         partition_file = ROOT / "installer" / "partitions" / "mini_v3.csv"
