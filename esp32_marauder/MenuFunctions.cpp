@@ -42,7 +42,7 @@ constexpr uint16_t MINI_UI_TEXT = TFT_WHITE;
 constexpr uint16_t MINI_UI_MUTED = 0xA514;
 constexpr uint16_t MINI_UI_DANGER = TFT_RED;
 constexpr int16_t MINI_V3_STATUS_CHANNEL_X = TFT_WIDTH / 4;
-constexpr int16_t MINI_V3_STATUS_RAM_CENTER_X = 92;
+constexpr int16_t MINI_V3_STATUS_RAM_CENTER_X = 90;
 constexpr int16_t MINI_V3_STATUS_RAM_X = 68;
 constexpr int16_t MINI_V3_STATUS_RAM_WIDTH = 48;
 
@@ -6117,7 +6117,8 @@ bool MenuFunctions::renderCurrentMenu(TFT_eSPI& target)
 
   target.fillRect(0, STATUS_BAR_WIDTH, SCREEN_WIDTH, TEXT_HEIGHT, TFT_BLACK);
   target.setTextColor(TFT_WHITE, TFT_BLACK);
-  target.setCursor((SCREEN_WIDTH - (mini_title.length() * 6)) / 2, STATUS_BAR_WIDTH);
+  target.setCursor((SCREEN_WIDTH - (mini_title.length() * 6)) / 2,
+                   STATUS_BAR_WIDTH + 1);
   target.println(mini_title);
 
   // Recreate the Mini V3 status bar from the same state values used by the

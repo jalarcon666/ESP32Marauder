@@ -682,6 +682,8 @@ void Display::buildBanner(String msg, int xpos)
 
   #if defined(MARAUDER_CARDPUTER) || defined(MARAUDER_CARDPUTER_ADV)
     int banner_y = STATUS_BAR_WIDTH + 8;
+  #elif defined(MARAUDER_MINI_V3)
+    int banner_y = STATUS_BAR_WIDTH + 1;
   #else
     int banner_y = STATUS_BAR_WIDTH;
   #endif
