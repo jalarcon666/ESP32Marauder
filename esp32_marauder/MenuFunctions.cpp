@@ -2464,6 +2464,18 @@ void MenuFunctions::releaseTransientWiFiSelectorMenus(const char* owner) {
 bool MenuFunctions::startEvilPortalForSSIDGroup(const String& group_name) {
   extern LinkedList<AccessPoint>* access_points;
 
+  if (!evil_portal_obj.hasHtmlSelection()) {
+    Serial.println(F("You need to select the Evil Portal HTML."));
+    #ifdef MARAUDER_MINI_V3
+      this->showMiniMenuError("You need to select the Evil Portal HTML.",
+                              &evilPortalMenu, evilPortalMenu.selected,
+                              "EVIL PORTAL");
+    #else
+      this->changeMenu(&evilPortalMenu, true, evilPortalMenu.selected);
+    #endif
+    return false;
+  }
+
   if (access_points == nullptr || access_points->size() == 0)
     return false;
 

@@ -6,10 +6,28 @@ ROOT = Path(__file__).resolve().parents[1]
 WIFI_SCAN = ROOT / "esp32_marauder" / "WiFiScan.cpp"
 WIFI_SCAN_HEADER = ROOT / "esp32_marauder" / "WiFiScan.h"
 EVIL_PORTAL = ROOT / "esp32_marauder" / "EvilPortal.cpp"
+EVIL_PORTAL_HEADER = ROOT / "esp32_marauder" / "EvilPortal.h"
 MINI_V3_WIFI6 = ROOT / "esp32_marauder" / "MiniV3WiFi6.cpp"
 
 
 class MiniV3EvilPortalTests(unittest.TestCase):
+    def test_missing_html_selection_has_an_explicit_error(self):
+        portal = EVIL_PORTAL.read_text(encoding="utf-8")
+        header = EVIL_PORTAL_HEADER.read_text(encoding="utf-8")
+        menu = (ROOT / "esp32_marauder" / "MenuFunctions.cpp").read_text(
+            encoding="utf-8"
+        )
+        message = "You need to select the Evil Portal HTML."
+        self.assertIn('String target_html_name = "";', header)
+        self.assertIn("bool hasHtmlSelection() const;", header)
+        self.assertIn("bool EvilPortal::hasHtmlSelection() const", portal)
+        self.assertIn(message, portal)
+        self.assertIn(message, menu)
+
+        start = menu.index("bool MenuFunctions::startEvilPortalForSSIDGroup")
+        launch = menu.index("wifi_scan_obj.StartScan(WIFI_SCAN_EVIL_PORTAL", start)
+        self.assertLess(menu.index(message, start), launch)
+
     def test_softap_is_validated_before_portal_is_ready(self):
         source = EVIL_PORTAL.read_text(encoding="utf-8")
         self.assertIn("WiFi.softAPSSID() != String(apName)", source)

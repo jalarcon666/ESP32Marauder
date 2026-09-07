@@ -145,11 +145,11 @@ class EvilPortal {
     bool installHtml(const char* html, size_t length);
 
   public:
-    String target_html_name = "index.html";
+    String target_html_name = "";
     uint8_t selected_html_index = 0;
 
-    bool using_serial_html;
-    bool has_ap;
+    bool using_serial_html = false;
+    bool has_ap = false;
 
     LinkedList<String>* html_files;
     LinkedList<PortalCredential>* captured_credentials;
@@ -164,6 +164,7 @@ class EvilPortal {
     uint32_t getPortalRequestCount() const;
     uint32_t getLastPortalRequestMs() const;
     bool hasPortalActivity() const;
+    bool hasHtmlSelection() const;
     bool isRunning() const;
     bool clearCredentials();
     String get_user_name();

@@ -156,6 +156,10 @@ void EvilPortal::cleanup() {
 }
 
 bool EvilPortal::begin(LinkedList<ssid>* ssids, LinkedList<AccessPoint>* access_points) {
+  if (!this->hasHtmlSelection()) {
+    Serial.println(F("You need to select the Evil Portal HTML."));
+    return false;
+  }
   if (!this->has_ap) {
     if (!this->setAP(ssids, access_points))
       return false;
@@ -300,6 +304,10 @@ const PortalCredential* EvilPortal::getSessionCredential(int index) {
 
 uint8_t EvilPortal::getConnectedClientCount() {
   return this->runServer ? WiFi.softAPgetStationNum() : 0;
+}
+
+bool EvilPortal::hasHtmlSelection() const {
+  return this->using_serial_html || this->target_html_name.length() > 0;
 }
 
 uint32_t EvilPortal::getPortalRequestCount() const {
