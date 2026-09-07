@@ -44,6 +44,16 @@ class MiniV3UiTests(unittest.TestCase):
         self.assertIn("const int16_t row_y = 22 + (b * 17);", source)
         self.assertIn("const int16_t row_height = 15;", source)
 
+    def test_status_bar_labels_and_centres_ram_between_channel_and_sd(self):
+        source = (ROOT / "esp32_marauder" / "MenuFunctions.cpp").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('String("RAM: ") + String(percent) + "%"', source)
+        self.assertIn("MINI_V3_STATUS_CHANNEL_X = 20", source)
+        self.assertIn("MINI_V3_STATUS_RAM_CENTER_X = 84", source)
+        self.assertIn("target.drawCentreString", source)
+        self.assertIn("drawMiniV3RamStatus(target, displayed_dram_percent)", source)
+
 
 if __name__ == "__main__":
     unittest.main()

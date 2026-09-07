@@ -41,6 +41,19 @@ constexpr uint16_t MINI_UI_SELECTED = 0x03E0;  // Dark green with readable white
 constexpr uint16_t MINI_UI_TEXT = TFT_WHITE;
 constexpr uint16_t MINI_UI_MUTED = 0xA514;
 constexpr uint16_t MINI_UI_DANGER = TFT_RED;
+constexpr int16_t MINI_V3_STATUS_CHANNEL_X = 20;
+constexpr int16_t MINI_V3_STATUS_RAM_CENTER_X = 84;
+constexpr int16_t MINI_V3_STATUS_RAM_X = 56;
+constexpr int16_t MINI_V3_STATUS_RAM_WIDTH = 56;
+
+void drawMiniV3RamStatus(TFT_eSPI& target, uint8_t percent)
+{
+  target.fillRect(MINI_V3_STATUS_RAM_X, 0, MINI_V3_STATUS_RAM_WIDTH,
+                  STATUS_BAR_WIDTH, STATUSBAR_COLOR);
+  target.setTextColor(TFT_WHITE, STATUSBAR_COLOR, true);
+  target.drawCentreString(String("RAM: ") + String(percent) + "%",
+                          MINI_V3_STATUS_RAM_CENTER_X, 0, 1);
+}
 
 bool miniMenuButtonDown(Switches& button) {
   const bool level = digitalRead(button.getPin());
@@ -1779,7 +1792,10 @@ void MenuFunctions::updateStatusBar()
 
   if ((current_channel != wifi_scan_obj.old_channel) || (status_changed)) {
     wifi_scan_obj.old_channel = current_channel;
-    #if defined(MARAUDER_MINI) || defined(MARAUDER_M5STICKC) || defined(MARAUDER_REV_FEATHER) || defined(MARAUDER_CARDPUTER) || defined(MARAUDER_CARDPUTER_ADV) || defined(MARAUDER_MINI_V3)
+    #ifdef MARAUDER_MINI_V3
+      display_obj.tft.fillRect(MINI_V3_STATUS_CHANNEL_X, 0, CHAR_WIDTH * 6,
+                               STATUS_BAR_WIDTH, STATUSBAR_COLOR);
+    #elif defined(MARAUDER_MINI) || defined(MARAUDER_M5STICKC) || defined(MARAUDER_REV_FEATHER) || defined(MARAUDER_CARDPUTER) || defined(MARAUDER_CARDPUTER_ADV)
       display_obj.tft.fillRect(TFT_WIDTH/4, 0, CHAR_WIDTH * 6, STATUS_BAR_WIDTH, STATUSBAR_COLOR);
     #elif defined(HAS_DUAL_BAND)
       display_obj.tft.fillRect(50, 0, (CHAR_WIDTH / 2) * 8, STATUS_BAR_WIDTH, STATUSBAR_COLOR);
@@ -1791,7 +1807,12 @@ void MenuFunctions::updateStatusBar()
     #endif
 
     #ifdef HAS_MINI_SCREEN
-      display_obj.tft.drawString("CH:" + (String)wifi_scan_obj.old_channel, TFT_WIDTH/4, 0, 1);
+      #ifdef MARAUDER_MINI_V3
+        display_obj.tft.drawString("CH:" + (String)wifi_scan_obj.old_channel,
+                                   MINI_V3_STATUS_CHANNEL_X, 0, 1);
+      #else
+        display_obj.tft.drawString("CH:" + (String)wifi_scan_obj.old_channel, TFT_WIDTH/4, 0, 1);
+      #endif
     #endif
   }
 
@@ -1810,7 +1831,11 @@ void MenuFunctions::updateStatusBar()
   #endif
 
   #ifdef HAS_MINI_SCREEN
-    display_obj.tft.drawString(String(getDRAMUsagePercent()) + "%", TFT_WIDTH/1.75, 0, 1);
+    #ifdef MARAUDER_MINI_V3
+      drawMiniV3RamStatus(display_obj.tft, getDRAMUsagePercent());
+    #else
+      display_obj.tft.drawString(String(getDRAMUsagePercent()) + "%", TFT_WIDTH/1.75, 0, 1);
+    #endif
   #endif
   }
 
@@ -1965,7 +1990,12 @@ void MenuFunctions::drawStatusBar()
     wifi_scan_obj.old_channel = wifi_scan_obj.set_channel;
 
   #ifdef HAS_MINI_SCREEN
-    display_obj.tft.fillRect(43, 0, TFT_WIDTH * 0.21, STATUS_BAR_WIDTH, STATUSBAR_COLOR);
+    #ifdef MARAUDER_MINI_V3
+      display_obj.tft.fillRect(MINI_V3_STATUS_CHANNEL_X, 0, CHAR_WIDTH * 6,
+                               STATUS_BAR_WIDTH, STATUSBAR_COLOR);
+    #else
+      display_obj.tft.fillRect(43, 0, TFT_WIDTH * 0.21, STATUS_BAR_WIDTH, STATUSBAR_COLOR);
+    #endif
   #else
     display_obj.tft.fillRect(50, 0, TFT_WIDTH * 0.21, STATUS_BAR_WIDTH, STATUSBAR_COLOR);
   #endif
@@ -1974,7 +2004,12 @@ void MenuFunctions::drawStatusBar()
   #endif
 
   #ifdef HAS_MINI_SCREEN
-    display_obj.tft.drawString("CH:" + (String)wifi_scan_obj.old_channel, TFT_WIDTH/4, 0, 1);
+    #ifdef MARAUDER_MINI_V3
+      display_obj.tft.drawString("CH:" + (String)wifi_scan_obj.old_channel,
+                                 MINI_V3_STATUS_CHANNEL_X, 0, 1);
+    #else
+      display_obj.tft.drawString("CH:" + (String)wifi_scan_obj.old_channel, TFT_WIDTH/4, 0, 1);
+    #endif
   #endif
 
   // RAM Stuff
@@ -1991,7 +2026,11 @@ void MenuFunctions::drawStatusBar()
   #endif
 
   #ifdef HAS_MINI_SCREEN
-    display_obj.tft.drawString(String(getDRAMUsagePercent()) + "%", TFT_WIDTH/1.75, 0, 1);
+    #ifdef MARAUDER_MINI_V3
+      drawMiniV3RamStatus(display_obj.tft, getDRAMUsagePercent());
+    #else
+      display_obj.tft.drawString(String(getDRAMUsagePercent()) + "%", TFT_WIDTH/1.75, 0, 1);
+    #endif
   #endif
 
 
@@ -6086,7 +6125,8 @@ bool MenuFunctions::renderCurrentMenu(TFT_eSPI& target)
   // menus rather than a status-bar glyph.
   target.fillRect(0, 0, SCREEN_WIDTH, STATUS_BAR_WIDTH, STATUSBAR_COLOR);
   target.setTextColor(TFT_WHITE, STATUSBAR_COLOR);
-  target.drawString("CH:" + String(wifi_scan_obj.old_channel), TFT_WIDTH / 4, 0, 1);
+  target.drawString("CH:" + String(wifi_scan_obj.old_channel),
+                    MINI_V3_STATUS_CHANNEL_X, 0, 1);
 
   const size_t total_heap = ESP.getHeapSize();
   const size_t displayed_free_heap = wifi_scan_obj.old_free_ram.toInt();
@@ -6095,7 +6135,7 @@ bool MenuFunctions::renderCurrentMenu(TFT_eSPI& target)
                                            displayed_free_heap > total_heap
                                            ? getDRAMUsagePercent()
                                            : ((total_heap - displayed_free_heap) * 100) / total_heap;
-  target.drawString(String(displayed_dram_percent) + "%", TFT_WIDTH / 1.75, 0, 1);
+  drawMiniV3RamStatus(target, displayed_dram_percent);
   target.setTextColor(sd_obj.supported ? MINI_UI_ACCENT : MINI_UI_MUTED, STATUSBAR_COLOR);
   target.drawString("SD", TFT_WIDTH - 12, 0, 1);
 
