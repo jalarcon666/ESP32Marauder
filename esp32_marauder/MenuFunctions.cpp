@@ -41,17 +41,17 @@ constexpr uint16_t MINI_UI_SELECTED = 0x03E0;  // Dark green with readable white
 constexpr uint16_t MINI_UI_TEXT = TFT_WHITE;
 constexpr uint16_t MINI_UI_MUTED = 0xA514;
 constexpr uint16_t MINI_UI_DANGER = TFT_RED;
-constexpr int16_t MINI_V3_STATUS_CHANNEL_X = 20;
-constexpr int16_t MINI_V3_STATUS_RAM_CENTER_X = 84;
-constexpr int16_t MINI_V3_STATUS_RAM_X = 56;
-constexpr int16_t MINI_V3_STATUS_RAM_WIDTH = 56;
+constexpr int16_t MINI_V3_STATUS_CHANNEL_X = TFT_WIDTH / 4;
+constexpr int16_t MINI_V3_STATUS_RAM_CENTER_X = 92;
+constexpr int16_t MINI_V3_STATUS_RAM_X = 68;
+constexpr int16_t MINI_V3_STATUS_RAM_WIDTH = 48;
 
 void drawMiniV3RamStatus(TFT_eSPI& target, uint8_t percent)
 {
   target.fillRect(MINI_V3_STATUS_RAM_X, 0, MINI_V3_STATUS_RAM_WIDTH,
                   STATUS_BAR_WIDTH, STATUSBAR_COLOR);
   target.setTextColor(TFT_WHITE, STATUSBAR_COLOR, true);
-  target.drawCentreString(String("RAM: ") + String(percent) + "%",
+  target.drawCentreString(String("RAM:") + String(percent) + "%",
                           MINI_V3_STATUS_RAM_CENTER_X, 0, 1);
 }
 

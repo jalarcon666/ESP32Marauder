@@ -48,9 +48,10 @@ class MiniV3UiTests(unittest.TestCase):
         source = (ROOT / "esp32_marauder" / "MenuFunctions.cpp").read_text(
             encoding="utf-8"
         )
-        self.assertIn('String("RAM: ") + String(percent) + "%"', source)
-        self.assertIn("MINI_V3_STATUS_CHANNEL_X = 20", source)
-        self.assertIn("MINI_V3_STATUS_RAM_CENTER_X = 84", source)
+        self.assertIn('String("RAM:") + String(percent) + "%"', source)
+        self.assertIn("MINI_V3_STATUS_CHANNEL_X = TFT_WIDTH / 4", source)
+        self.assertIn("MINI_V3_STATUS_RAM_CENTER_X = 92", source)
+        self.assertIn("MINI_V3_STATUS_RAM_X = 68", source)
         self.assertIn("target.drawCentreString", source)
         self.assertIn("drawMiniV3RamStatus(target, displayed_dram_percent)", source)
 
