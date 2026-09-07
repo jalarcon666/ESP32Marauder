@@ -49,17 +49,17 @@ class MiniV3UiTests(unittest.TestCase):
             encoding="utf-8"
         )
         self.assertIn('String("RAM:") + String(percent) + "%"', source)
-        self.assertIn("MINI_V3_STATUS_CHANNEL_X = TFT_WIDTH / 4", source)
-        self.assertIn("MINI_V3_STATUS_RAM_CENTER_X = 90", source)
-        self.assertIn("MINI_V3_STATUS_RAM_X = 68", source)
+        self.assertIn("MINI_V3_STATUS_CHANNEL_X = 30", source)
+        self.assertIn("MINI_V3_STATUS_RAM_CENTER_X = 87", source)
+        self.assertIn("MINI_V3_STATUS_RAM_X = 66", source)
         self.assertIn("target.drawCentreString", source)
         self.assertIn("drawMiniV3RamStatus(target, displayed_dram_percent)", source)
 
         display = (ROOT / "esp32_marauder" / "Display.cpp").read_text(
             encoding="utf-8"
         )
-        self.assertIn("int banner_y = STATUS_BAR_WIDTH + 1", display)
-        self.assertIn("STATUS_BAR_WIDTH + 1);", source)
+        self.assertIn("int banner_y = STATUS_BAR_WIDTH + 2", display)
+        self.assertIn("STATUS_BAR_WIDTH + 2);", source)
 
 
 if __name__ == "__main__":

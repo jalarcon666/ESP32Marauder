@@ -41,9 +41,9 @@ constexpr uint16_t MINI_UI_SELECTED = 0x03E0;  // Dark green with readable white
 constexpr uint16_t MINI_UI_TEXT = TFT_WHITE;
 constexpr uint16_t MINI_UI_MUTED = 0xA514;
 constexpr uint16_t MINI_UI_DANGER = TFT_RED;
-constexpr int16_t MINI_V3_STATUS_CHANNEL_X = TFT_WIDTH / 4;
-constexpr int16_t MINI_V3_STATUS_RAM_CENTER_X = 90;
-constexpr int16_t MINI_V3_STATUS_RAM_X = 68;
+constexpr int16_t MINI_V3_STATUS_CHANNEL_X = 30;
+constexpr int16_t MINI_V3_STATUS_RAM_CENTER_X = 87;
+constexpr int16_t MINI_V3_STATUS_RAM_X = 66;
 constexpr int16_t MINI_V3_STATUS_RAM_WIDTH = 48;
 
 void drawMiniV3RamStatus(TFT_eSPI& target, uint8_t percent)
@@ -1769,8 +1769,13 @@ void MenuFunctions::updateStatusBar()
         display_obj.tft.drawString(gps_obj.getNumSatsString(), 22, 0, 2);
       }
     #elif defined(HAS_SCREEN)
-      display_obj.tft.fillRect(0, 0, TFT_WIDTH / 4, STATUS_BAR_WIDTH,
-                               STATUSBAR_COLOR);
+      #ifdef MARAUDER_MINI_V3
+        display_obj.tft.fillRect(0, 0, MINI_V3_STATUS_CHANNEL_X,
+                                 STATUS_BAR_WIDTH, STATUSBAR_COLOR);
+      #else
+        display_obj.tft.fillRect(0, 0, TFT_WIDTH / 4, STATUS_BAR_WIDTH,
+                                 STATUSBAR_COLOR);
+      #endif
       if (gps_locked) {
         display_obj.tft.setTextColor(the_color, STATUSBAR_COLOR, true);
         display_obj.tft.drawString("GPS", 0, 0, 1);
@@ -6118,7 +6123,7 @@ bool MenuFunctions::renderCurrentMenu(TFT_eSPI& target)
   target.fillRect(0, STATUS_BAR_WIDTH, SCREEN_WIDTH, TEXT_HEIGHT, TFT_BLACK);
   target.setTextColor(TFT_WHITE, TFT_BLACK);
   target.setCursor((SCREEN_WIDTH - (mini_title.length() * 6)) / 2,
-                   STATUS_BAR_WIDTH + 1);
+                   STATUS_BAR_WIDTH + 2);
   target.println(mini_title);
 
   // Recreate the Mini V3 status bar from the same state values used by the
