@@ -24,7 +24,6 @@ struct Snapshot {
   uint32_t txBytes;
   int8_t requestedTxPowerQdbm;
   int8_t effectiveTxPowerQdbm;
-  uint8_t effectiveTxPowerChannel;
   esp_err_t txPowerSetStatus;
   esp_err_t txPowerGetStatus;
   bool requestedTxPowerValid;
@@ -38,10 +37,8 @@ void recordRx(const wifi_promiscuous_pkt_t* packet,
               wifi_promiscuous_pkt_type_t type);
 void recordTx(esp_err_t status, size_t bytes);
 void recordTxPower(int8_t requestedQdbm, esp_err_t setStatus,
-                   int8_t effectiveQdbm, esp_err_t getStatus,
-                   uint8_t channel);
-void recordEffectiveTxPower(int8_t effectiveQdbm, esp_err_t getStatus,
-                            uint8_t channel);
+                   int8_t effectiveQdbm, esp_err_t getStatus);
+void recordEffectiveTxPower(int8_t effectiveQdbm, esp_err_t getStatus);
 Snapshot snapshot();
 
 }  // namespace RadioDiagnostics

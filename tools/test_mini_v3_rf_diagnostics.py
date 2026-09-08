@@ -13,9 +13,7 @@ class MiniV3RfDiagnosticsTests(unittest.TestCase):
         self.assertIn("esp_wifi_set_max_tx_power(MAX_WIFI_TX_POWER_QDBM)", source)
         self.assertIn("esp_wifi_get_max_tx_power(&effective_tx_power)", source)
         self.assertIn("RadioDiagnostics::recordTxPower", source)
-        self.assertIn("maximum 20 dBm 2.4 GHz cap confirmed", source)
-        self.assertIn("maximum 18 dBm 5 GHz cap confirmed", source)
-        self.assertIn("effectiveTxPowerChannel", source)
+        self.assertIn("maximum 20 dBm driver cap confirmed", source)
 
     def test_every_wifi_scan_raw_tx_is_accounted(self):
         source = (FIRMWARE / "WiFiScan.cpp").read_text(encoding="utf-8")
