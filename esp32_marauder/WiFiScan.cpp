@@ -7,7 +7,6 @@
 #include "WiFiFlockDetector.h"
 #include "MiniV3WiFi6.h"
 #include "EvilPortalStatus.h"
-#include "RadioDiagnostics.h"
 #include "lang_var.h"
 
 #if defined(MARAUDER_MINI_V3) && defined(HAS_BUTTONS)
@@ -51,15 +50,6 @@ constexpr size_t WATCH_MODEL_COUNT = 18;
 constexpr size_t MAX_SAVED_LIST_FILE_BYTES = 32768;
 constexpr size_t MAX_BLE_PAYLOAD_BYTES = 1650;
 constexpr uint16_t MAX_IP_ENTRIES = 512;
-constexpr int8_t MAX_WIFI_TX_POWER_QDBM = 82;
-
-esp_err_t diagnosticRawTx(wifi_interface_t interface, const void* buffer,
-                          int length, bool useSystemSequence) {
-  const esp_err_t status =
-      esp_wifi_80211_tx(interface, buffer, length, useSystemSequence);
-  RadioDiagnostics::recordTx(status, length > 0 ? length : 0);
-  return status;
-}
 
 #ifdef HAS_SD
 bool replaceSdFile(const char* temporary_path, const char* target_path,
@@ -141,29 +131,6 @@ void formatCompactCount(uint32_t value, char* output, size_t output_size) {
     snprintf(output, output_size, "%luM",
              static_cast<unsigned long>(value / 1000000));
   }
-}
-
-void formatQuarterDbm(int8_t quarter_dbm, char* output, size_t output_size) {
-  if (output == nullptr || output_size == 0)
-    return;
-  const int value = static_cast<int>(quarter_dbm);
-  const unsigned magnitude = value < 0 ? -value : value;
-  snprintf(output, output_size, "%s%u.%02u", value < 0 ? "-" : "",
-           magnitude / 4, (magnitude % 4) * 25);
-}
-
-int8_t mappedQuarterDbm(int8_t requested) {
-  if (requested >= 80) return 80;
-  if (requested >= 72) return 72;
-  if (requested >= 66) return 66;
-  if (requested >= 60) return 60;
-  if (requested >= 56) return 56;
-  if (requested >= 52) return 52;
-  if (requested >= 44) return 44;
-  if (requested >= 34) return 34;
-  if (requested >= 28) return 28;
-  if (requested >= 20) return 20;
-  return 8;
 }
 
 void truncateEvilPortalLine(char* line, size_t capacity) {
@@ -3853,7 +3820,6 @@ void WiFiScan::drawEvilPortalStatus() {
 
 bool WiFiScan::startWiFiAttacks(uint8_t scan_mode, uint16_t color,
                                 const char* title_string) {
-  RadioDiagnostics::resetTraffic(millis());
   packets_sent = 0;
   this->deauth_tx_ready = false;
   this->deauth_ap_cursor = 0;
@@ -4050,27 +4016,10 @@ bool WiFiScan::startWiFiAttacks(uint8_t scan_mode, uint16_t color,
     if (status != ESP_OK)
       return fail_start("esp_wifi_set_promiscuous", status);
   }
-  status = esp_wifi_set_max_tx_power(MAX_WIFI_TX_POWER_QDBM);
-  int8_t effective_tx_power = 0;
-  const esp_err_t get_power_status =
-      esp_wifi_get_max_tx_power(&effective_tx_power);
-  RadioDiagnostics::recordTxPower(MAX_WIFI_TX_POWER_QDBM, status,
-                                  effective_tx_power, get_power_status);
-  if (status != ESP_OK) {
+  status = esp_wifi_set_max_tx_power(82);
+  if (status != ESP_OK)
     Serial.printf("[WiFi Attack] max TX power request: %s\n",
                   esp_err_to_name(status));
-  }
-  if (get_power_status == ESP_OK) {
-    Serial.printf("[WiFi Attack] TX power request raw=%d "
-                  "(maps to 20.00 dBm), effective=%.2f dBm (raw %d)\n",
-                  static_cast<int>(MAX_WIFI_TX_POWER_QDBM),
-                  effective_tx_power / 4.0f,
-                  static_cast<int>(effective_tx_power));
-  }
-  else {
-    Serial.printf("[WiFi Attack] TX power readback failed: %s\n",
-                  esp_err_to_name(get_power_status));
-  }
 
   // The C5 driver can report started before its transmit-side state is usable
   // after repeated stop/start cycles. Do not schedule a raw frame immediately.
@@ -5097,7 +5046,6 @@ void WiFiScan::writeNetworkInfo() {
 }
 
 bool WiFiScan::setWiFiMode(wifi_mode_t mode, wifi_promiscuous_cb_t cb) {
-  RadioDiagnostics::resetTraffic(millis());
   const auto fail = [this](const char* stage, esp_err_t status) {
     Serial.printf("[WiFi Sniffer] %s failed: %s\n", stage,
                   esp_err_to_name(status));
@@ -5137,7 +5085,6 @@ bool WiFiScan::startSnifferWiFi(const wifi_init_config_t& init_config,
                                 wifi_promiscuous_cb_t callback,
                                 bool configure_hidden_ap,
                                 const char* owner) {
-  RadioDiagnostics::resetTraffic(millis());
   this->deauth_tx_ready = false;
   const char* safe_owner = owner != nullptr ? owner : "Sniffer";
   const auto fail_start = [this, safe_owner](const char* stage,
@@ -6550,187 +6497,6 @@ void WiFiScan::RunInfo() {
   //#ifdef HAS_SCREEN
   //  display_obj.tft.println(text_table4[35] + (String)temp_obj.current_temp + " C");
   //#endif
-}
-
-void WiFiScan::RunRadioDiagnostics(bool do_display, bool reset_traffic) {
-  if (reset_traffic)
-    RadioDiagnostics::resetTraffic(millis());
-
-  wifi_mode_t wifi_mode = WIFI_MODE_NULL;
-  const esp_err_t mode_status = esp_wifi_get_mode(&wifi_mode);
-  const bool driver_active = mode_status == ESP_OK;
-  uint8_t channel = 0;
-  wifi_second_chan_t second_channel = WIFI_SECOND_CHAN_NONE;
-  if (driver_active)
-    esp_wifi_get_channel(&channel, &second_channel);
-
-  bool promiscuous = false;
-  if (driver_active)
-    esp_wifi_get_promiscuous(&promiscuous);
-
-  const wifi_interface_t interface =
-      (wifi_mode == WIFI_MODE_AP || wifi_mode == WIFI_MODE_APSTA)
-          ? WIFI_IF_AP
-          : WIFI_IF_STA;
-  uint8_t protocols = 0;
-  const esp_err_t protocol_status = driver_active
-      ? esp_wifi_get_protocol(interface, &protocols)
-      : ESP_ERR_INVALID_STATE;
-
-  int8_t live_power = 0;
-  const esp_err_t live_power_status = driver_active
-      ? esp_wifi_get_max_tx_power(&live_power)
-      : ESP_ERR_INVALID_STATE;
-  if (live_power_status == ESP_OK)
-    RadioDiagnostics::recordEffectiveTxPower(live_power, live_power_status);
-
-  const RadioDiagnostics::Snapshot stats = RadioDiagnostics::snapshot();
-  const uint32_t measured_ms = millis() - stats.startedMs;
-  const uint32_t elapsed_ms = measured_ms == 0 ? 1 : measured_ms;
-  const uint32_t tx_rate = static_cast<uint32_t>(
-      static_cast<uint64_t>(stats.txAttempts) * 1000ULL / elapsed_ms);
-  const uint32_t rx_rate = static_cast<uint32_t>(
-      static_cast<uint64_t>(stats.rxPackets) * 1000ULL / elapsed_ms);
-  const uint32_t tx_success = stats.txAttempts == 0 ? 0 :
-      static_cast<uint32_t>(
-          static_cast<uint64_t>(stats.txAccepted) * 100ULL /
-          stats.txAttempts);
-  const int32_t average_rssi = stats.rxPackets == 0 ? 0 :
-      stats.rxRssiSum / static_cast<int32_t>(stats.rxPackets);
-
-  String protocol_text;
-  if (protocol_status == ESP_OK) {
-    if (protocols & WIFI_PROTOCOL_11B) protocol_text += "B";
-    if (protocols & WIFI_PROTOCOL_11G) protocol_text += "G";
-    if (protocols & WIFI_PROTOCOL_11N) protocol_text += "N";
-    #ifdef WIFI_PROTOCOL_LR
-      if (protocols & WIFI_PROTOCOL_LR) protocol_text += "L";
-    #endif
-    #ifdef WIFI_PROTOCOL_11AX
-      if (protocols & WIFI_PROTOCOL_11AX) protocol_text += "AX";
-    #endif
-  }
-  if (protocol_text.isEmpty())
-    protocol_text = "N/A";
-
-  char requested_power[12] = "N/A";
-  char mapped_power[12] = "N/A";
-  char effective_power[12] = "N/A";
-  int8_t mapped_requested_power = 0;
-  if (stats.requestedTxPowerValid) {
-    formatQuarterDbm(stats.requestedTxPowerQdbm, requested_power,
-                     sizeof(requested_power));
-    mapped_requested_power = mappedQuarterDbm(stats.requestedTxPowerQdbm);
-    formatQuarterDbm(mapped_requested_power, mapped_power,
-                     sizeof(mapped_power));
-  }
-  if (stats.effectiveTxPowerValid)
-    formatQuarterDbm(stats.effectiveTxPowerQdbm, effective_power,
-                     sizeof(effective_power));
-
-  Serial.println(F("=== ESP32-C5 RF diagnostics ==="));
-  Serial.printf("Driver: %s; mode=%d; channel=%u; promiscuous RX=%s\n",
-                driver_active ? "ON" : "OFF", static_cast<int>(wifi_mode),
-                static_cast<unsigned>(channel), promiscuous ? "ON" : "OFF");
-  Serial.printf("Protocols configured: %s (bitmap 0x%02X)\n",
-                protocol_text.c_str(), static_cast<unsigned>(protocols));
-  if (stats.requestedTxPowerValid) {
-    Serial.printf("TX power: request-raw=%d (%s dBm nominal); "
-                  "mapped-goal=%s dBm; effective=%s dBm; set=%s",
-                  static_cast<int>(stats.requestedTxPowerQdbm),
-                  requested_power, mapped_power, effective_power,
-                  esp_err_to_name(stats.txPowerSetStatus));
-  }
-  else {
-    Serial.printf("TX power: request-raw=N/A; mapped-goal=N/A; "
-                  "effective=%s dBm", effective_power);
-  }
-  Serial.printf("; readback=%s\n", esp_err_to_name(stats.txPowerGetStatus));
-  Serial.printf("Raw TX: attempts=%lu accepted=%lu failed=%lu success=%lu%% "
-                "rate=%lu/s accepted-bytes=%lu\n",
-                static_cast<unsigned long>(stats.txAttempts),
-                static_cast<unsigned long>(stats.txAccepted),
-                static_cast<unsigned long>(stats.txFailed),
-                static_cast<unsigned long>(tx_success),
-                static_cast<unsigned long>(tx_rate),
-                static_cast<unsigned long>(stats.txBytes));
-  Serial.printf("Observed RX: packets=%lu rate=%lu/s bytes=%lu "
-                "mgmt=%lu ctrl=%lu data=%lu misc=%lu\n",
-                static_cast<unsigned long>(stats.rxPackets),
-                static_cast<unsigned long>(rx_rate),
-                static_cast<unsigned long>(stats.rxBytes),
-                static_cast<unsigned long>(stats.rxManagement),
-                static_cast<unsigned long>(stats.rxControl),
-                static_cast<unsigned long>(stats.rxData),
-                static_cast<unsigned long>(stats.rxMisc));
-  if (stats.rxPackets > 0) {
-    Serial.printf("RX RSSI: average=%ld dBm strongest=%d dBm weakest=%d dBm "
-                  "last=%d dBm\n",
-                  static_cast<long>(average_rssi),
-                  static_cast<int>(stats.rxStrongestRssi),
-                  static_cast<int>(stats.rxWeakestRssi),
-                  static_cast<int>(stats.rxLastRssi));
-  }
-  else {
-    Serial.println(F("RX RSSI: no observed frames in this interval"));
-  }
-  if (stats.requestedTxPowerValid && stats.effectiveTxPowerValid) {
-    if (stats.txPowerSetStatus != ESP_OK)
-      Serial.println(F("TX verdict: requested cap was rejected by the driver"));
-    else if (stats.effectiveTxPowerQdbm < mapped_requested_power)
-      Serial.println(F("TX verdict: driver/regulatory cap is below the mapped goal"));
-    else
-      Serial.println(F("TX verdict: maximum 20 dBm driver cap confirmed"));
-  }
-  else {
-    Serial.println(F("TX verdict: run a TX feature before checking its power cap"));
-  }
-  Serial.println(F("Note: TX accepted is not an over-air ACK. RX counts frames "
-                   "delivered to promiscuous callbacks; ESP-IDF exposes no "
-                   "promiscuous drop/sensitivity counter here."));
-
-  #ifdef HAS_SCREEN
-    if (do_display) {
-      char tx_attempts[12]{};
-      char rx_packets[12]{};
-      formatCompactCount(stats.txAttempts, tx_attempts, sizeof(tx_attempts));
-      formatCompactCount(stats.rxPackets, rx_packets, sizeof(rx_packets));
-      display_obj.tft.fillRect(0, SCREEN_HEIGHT / 3, TFT_WIDTH,
-                               SCREEN_HEIGHT - SCREEN_HEIGHT / 3, TFT_BLACK);
-      display_obj.tft.setTextWrap(false);
-      display_obj.tft.setFreeFont(NULL);
-      display_obj.tft.setTextSize(1);
-      display_obj.tft.setCursor(0, SCREEN_HEIGHT / 3);
-      display_obj.tft.setTextColor(TFT_CYAN, TFT_BLACK);
-      display_obj.tft.printf("DRV:%s CH:%u %s\n", driver_active ? "ON" : "OFF",
-                             static_cast<unsigned>(channel),
-                             protocol_text.c_str());
-      display_obj.tft.setTextColor(TFT_WHITE, TFT_BLACK);
-      display_obj.tft.printf("TX goal:%sdBm\n", mapped_power);
-      display_obj.tft.printf("TX eff:%sdBm\n", effective_power);
-      display_obj.tft.printf("TX:%s F:%lu %lu%%\n", tx_attempts,
-                             static_cast<unsigned long>(stats.txFailed),
-                             static_cast<unsigned long>(tx_success));
-      display_obj.tft.printf("TX rate:%lu/s\n",
-                             static_cast<unsigned long>(tx_rate));
-      display_obj.tft.printf("RX:%s %lu/s\n", rx_packets,
-                             static_cast<unsigned long>(rx_rate));
-      display_obj.tft.printf("M/C/D:%lu/%lu/%lu\n",
-                             static_cast<unsigned long>(stats.rxManagement),
-                             static_cast<unsigned long>(stats.rxControl),
-                             static_cast<unsigned long>(stats.rxData));
-      if (stats.rxPackets > 0)
-        display_obj.tft.printf("RSSI:%ld hi:%d\n",
-                               static_cast<long>(average_rssi),
-                               static_cast<int>(stats.rxStrongestRssi));
-      else
-        display_obj.tft.println(F("RSSI:no samples"));
-      display_obj.tft.setTextColor(TFT_YELLOW, TFT_BLACK);
-      display_obj.tft.println(F("RX drops:N/A"));
-    }
-  #else
-    (void)do_display;
-  #endif
 }
 
 void WiFiScan::RunPacketMonitor(uint8_t scan_mode, uint16_t color) {
@@ -9201,7 +8967,6 @@ void WiFiScan::apSnifferCallbackFull(void* buf, wifi_promiscuous_pkt_type_t type
   if (buf == nullptr)
     return;
   wifi_promiscuous_pkt_t *snifferPacket = (wifi_promiscuous_pkt_t*)buf;
-  RadioDiagnostics::recordRx(snifferPacket, type);
   int len = snifferPacket->rx_ctrl.sig_len;
 
   if (len < 16)
@@ -9850,7 +9615,6 @@ void WiFiScan::pineScanSnifferCallback(void* buf, wifi_promiscuous_pkt_type_t ty
     return;
 
   wifi_promiscuous_pkt_t *snifferPacket = (wifi_promiscuous_pkt_t*)buf;
-  RadioDiagnostics::recordRx(snifferPacket, type);
   int len = snifferPacket->rx_ctrl.sig_len;
 
   String display_string = "";
@@ -10215,7 +9979,6 @@ void WiFiScan::multiSSIDSnifferCallback(void* buf, wifi_promiscuous_pkt_type_t t
     return;
 
   wifi_promiscuous_pkt_t *snifferPacket = (wifi_promiscuous_pkt_t*)buf;
-  RadioDiagnostics::recordRx(snifferPacket, type);
   int len = snifferPacket->rx_ctrl.sig_len;
 
   String display_string = "";
@@ -10628,7 +10391,7 @@ bool WiFiScan::sendSAECommitFrame(uint8_t* targ_addr, uint8_t* src_addr) {
       current_index++;
   }
 
-  if (diagnosticRawTx(WIFI_IF_STA, frame, current_index - frame, false) != ESP_OK)
+  if (esp_wifi_80211_tx(WIFI_IF_STA, frame, current_index - frame, false) != ESP_OK)
     return false;
 
   this->data_frames++;
@@ -10715,7 +10478,6 @@ void WiFiScan::beaconSnifferCallback(void* buf, wifi_promiscuous_pkt_type_t type
   if (buf == nullptr)
     return;
   wifi_promiscuous_pkt_t *snifferPacket = (wifi_promiscuous_pkt_t*)buf;
-  RadioDiagnostics::recordRx(snifferPacket, type);
   int len = snifferPacket->rx_ctrl.sig_len;
 
   if (len < 16)
@@ -11257,7 +11019,7 @@ void WiFiScan::broadcastCustomBeacon(uint32_t current_time, AccessPoint custom_s
   temp_frame[35] = custom_ssid.beacon[1];
 
   for (int i = 0; i < 2; i++)
-    diagnosticRawTx(WIFI_IF_AP, temp_frame, sizeof(temp_frame), false);
+    esp_wifi_80211_tx(WIFI_IF_AP, temp_frame, sizeof(temp_frame), false);
 
   packets_sent = packets_sent + 2;
 }
@@ -11331,7 +11093,7 @@ void WiFiScan::broadcastCustomBeacon(uint32_t current_time, ssid custom_ssid, bo
     uint16_t seq = (packets_sent & 0x0FFF) << 4;  // 12-bit sequence number
     temp_frame[22] = seq & 0xFF;        // low byte
     temp_frame[23] = (seq >> 8) & 0xFF;
-    diagnosticRawTx(WIFI_IF_AP, temp_frame, sizeof(temp_frame), false);
+    esp_wifi_80211_tx(WIFI_IF_AP, temp_frame, sizeof(temp_frame), false);
     packets_sent++;
   }
 
@@ -11399,7 +11161,7 @@ void WiFiScan::broadcastSetSSID(uint32_t current_time, const char* ESSID,
   const size_t frame_length = 51 + ssidLen;
   esp_err_t last_status = ESP_OK;
   for (uint8_t copy = 0; copy < PRESET_BEACON_COPY_COUNT; copy++) {
-    last_status = diagnosticRawTx(WIFI_IF_AP, packet, frame_length, false);
+    last_status = esp_wifi_80211_tx(WIFI_IF_AP, packet, frame_length, false);
     if (last_status == ESP_OK) {
       packets_sent++;
       continue;
@@ -11493,7 +11255,7 @@ void WiFiScan::broadcastRandomSSID(uint32_t currentTime) {
   setBeaconFrameChannel(temp_frame, sizeof(temp_frame), fullLen, set_channel);
 
   for (int i = 0; i < 2; i++)
-    diagnosticRawTx(WIFI_IF_AP, temp_frame, sizeof(temp_frame), false);
+    esp_wifi_80211_tx(WIFI_IF_AP, temp_frame, sizeof(temp_frame), false);
 
   packets_sent = packets_sent + 2;
 }
@@ -11552,12 +11314,9 @@ void WiFiScan::sendProbeAttack(uint32_t currentTime) {
 
 
       // Send packet
-      diagnosticRawTx(WIFI_IF_AP, good_probe_req_packet,
-                      sizeof(good_probe_req_packet), false);
-      diagnosticRawTx(WIFI_IF_AP, good_probe_req_packet,
-                      sizeof(good_probe_req_packet), false);
-      diagnosticRawTx(WIFI_IF_AP, good_probe_req_packet,
-                      sizeof(good_probe_req_packet), false);
+      esp_wifi_80211_tx(WIFI_IF_AP, good_probe_req_packet, sizeof(good_probe_req_packet), false);
+      esp_wifi_80211_tx(WIFI_IF_AP, good_probe_req_packet, sizeof(good_probe_req_packet), false);
+      esp_wifi_80211_tx(WIFI_IF_AP, good_probe_req_packet, sizeof(good_probe_req_packet), false);
 
       packets_sent = packets_sent + 3;
     }
@@ -11800,7 +11559,7 @@ esp_err_t WiFiScan::transmitPreparedDeauthFrame() {
   this->deauth_frame_default[22] = sequence_control & 0xFF;
   this->deauth_frame_default[23] = sequence_control >> 8;
 
-  const esp_err_t status = diagnosticRawTx(
+  const esp_err_t status = esp_wifi_80211_tx(
       WIFI_IF_AP, this->deauth_frame_default,
       sizeof(this->deauth_frame_default), false);
   if (status == ESP_ERR_NO_MEM || status == ESP_ERR_WIFI_WOULD_BLOCK ||
@@ -12000,7 +11759,7 @@ void WiFiScan::sendEapolBagMsg1(uint8_t bssid[6], int channel, uint8_t mac[6], u
   }
 
   // Send packet
-  diagnosticRawTx(WIFI_IF_AP, eapol_packet_bad_msg1, frame_size, false);
+  esp_wifi_80211_tx(WIFI_IF_AP, eapol_packet_bad_msg1, frame_size, false);
 
   packets_sent = packets_sent + 1;
 }
@@ -12046,7 +11805,7 @@ void WiFiScan::sendEapolBagMsg1(uint8_t bssid[6], int channel, uint8_t mac[6], u
   }
 
   // Send packet
-  diagnosticRawTx(WIFI_IF_AP, eapol_packet_bad_msg1, frame_size, false);
+  esp_wifi_80211_tx(WIFI_IF_AP, eapol_packet_bad_msg1, frame_size, false);
 
   packets_sent = packets_sent + 1;
 }*/
@@ -12173,7 +11932,7 @@ void WiFiScan::sendAssociationSleep(const char* ESSID, uint8_t bssid[6], int cha
   association_packet[offset++] = 0x02;
 
   // Send packet
-  diagnosticRawTx(WIFI_IF_AP, association_packet, offset, false);
+  esp_wifi_80211_tx(WIFI_IF_AP, association_packet, offset, false);
 
   packets_sent = packets_sent + 1;
 }
@@ -12247,7 +12006,6 @@ void WiFiScan::wifiSnifferCallback(void* buf, wifi_promiscuous_pkt_type_t type) 
   if (buf == nullptr)
     return;
   wifi_promiscuous_pkt_t *snifferPacket = (wifi_promiscuous_pkt_t*)buf;
-  RadioDiagnostics::recordRx(snifferPacket, type);
   int len = snifferPacket->rx_ctrl.sig_len;
 
   if (len < 16)
@@ -12554,7 +12312,6 @@ void WiFiScan::eapolSnifferCallback(void* buf, wifi_promiscuous_pkt_type_t type)
   String bssid = "";
 
   wifi_promiscuous_pkt_t *snifferPacket = (wifi_promiscuous_pkt_t*)buf;
-  RadioDiagnostics::recordRx(snifferPacket, type);
   int len = snifferPacket->rx_ctrl.sig_len;
 
   if (len < 16)

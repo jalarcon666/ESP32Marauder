@@ -5103,12 +5103,6 @@ void MenuFunctions::RunSetup()
     this->addNodes(&deviceMenu, "Set Date/Time", TFTCYAN, DEVICE, [this]() {
       this->clockMode();
     });
-    this->addNodes(&deviceMenu, "RF Diagnostics", TFTCYAN, DEVICE_INFO,
-                   [this]() {
-      wifi_scan_obj.currentScanMode = SHOW_INFO;
-      this->changeMenu(&infoMenu, true);
-      wifi_scan_obj.RunRadioDiagnostics();
-    });
   #endif
 
   this->addNodes(&deviceMenu, text_table1[17], TFTWHITE, DEVICE_INFO, [this]() {

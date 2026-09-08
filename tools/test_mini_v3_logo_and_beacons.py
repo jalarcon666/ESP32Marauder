@@ -63,7 +63,7 @@ class MiniV3LogoAndBeaconTests(unittest.TestCase):
         function = source[start:end]
         self.assertIn("const size_t frame_length = 51 + ssidLen", function)
         self.assertIn(
-            "diagnosticRawTx(WIFI_IF_AP, packet, frame_length, false)",
+            "esp_wifi_80211_tx(WIFI_IF_AP, packet, frame_length, false)",
             function,
         )
         self.assertNotIn("packet, sizeof(packet)", function)

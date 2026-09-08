@@ -581,7 +581,6 @@ void CommandLine::runCommand(String input) {
     Serial.println(HELP_EVIL_PORTAL_CMD);
     Serial.println(HELP_KARMA_CMD);
     Serial.println(HELP_PACKET_COUNT_CMD);
-    Serial.println(HELP_RF_DIAG_CMD);
     Serial.println(HELP_PING_CMD);
     Serial.println(HELP_ARP_SCAN_CMD);
     Serial.println(HELP_PORT_SCAN_CMD);
@@ -684,11 +683,6 @@ void CommandLine::runCommand(String input) {
     #else
       Serial.println(F("Screenshot unavailable: this target has no menu framebuffer"));
     #endif
-  }
-  // RF diagnostics remain available while a scan or attack is running.
-  else if (cmd_args.get(0) == RF_DIAG_CMD) {
-    wifi_scan_obj.RunRadioDiagnostics(false,
-                                      this->argSearch(&cmd_args, "-r") >= 0);
   }
   // Stop Scan
   else if (cmd_args.get(0) == STOPSCAN_CMD) {

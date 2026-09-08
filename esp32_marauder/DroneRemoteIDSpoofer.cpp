@@ -21,7 +21,6 @@
 #include <esp_wifi.h>
 
 #include "Display.h"
-#include "RadioDiagnostics.h"
 #include "Switches.h"
 
 extern Display display_obj;
@@ -135,10 +134,7 @@ bool sendWifiBeacon(
   frame[56] = 0x0D;
   frame[57] = counter;
   memcpy(frame + 58, message, DroneRemoteID::CAPTURED_MESSAGE_SIZE);
-  const esp_err_t status =
-      esp_wifi_80211_tx(WIFI_IF_STA, frame, sizeof(frame), false);
-  RadioDiagnostics::recordTx(status, sizeof(frame));
-  return status == ESP_OK;
+  return esp_wifi_80211_tx(WIFI_IF_STA, frame, sizeof(frame), false) == ESP_OK;
 }
 
 void drawStatus(uint32_t started, uint32_t blePackets, uint32_t wifiPackets,
@@ -256,7 +252,6 @@ void run() {
 
   const uint8_t wifiChannel = selectedTarget.channel >= 1 &&
       selectedTarget.channel <= 11 ? selectedTarget.channel : DEFAULT_WIFI_CHANNEL;
-  RadioDiagnostics::resetTraffic(millis());
   WiFi.disconnect(true);
   WiFi.mode(WIFI_OFF);
   delay(20);
