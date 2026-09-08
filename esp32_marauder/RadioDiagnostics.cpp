@@ -20,6 +20,7 @@ volatile uint32_t txFailed = 0;
 volatile uint32_t txBytes = 0;
 volatile int8_t requestedTxPowerQdbm = 0;
 volatile int8_t effectiveTxPowerQdbm = 0;
+volatile uint8_t effectiveTxPowerChannel = 0;
 volatile int32_t txPowerSetStatus = ESP_ERR_INVALID_STATE;
 volatile int32_t txPowerGetStatus = ESP_ERR_INVALID_STATE;
 volatile uint8_t txPowerFlags = 0;
@@ -116,9 +117,11 @@ void recordTx(esp_err_t status, size_t bytes) {
 }
 
 void recordTxPower(int8_t requestedQdbm, esp_err_t setStatus,
-                   int8_t effectiveQdbm, esp_err_t getStatus) {
+                   int8_t effectiveQdbm, esp_err_t getStatus,
+                   uint8_t channel) {
   storeRelaxed(&requestedTxPowerQdbm, requestedQdbm);
   storeRelaxed(&effectiveTxPowerQdbm, effectiveQdbm);
+  storeRelaxed(&effectiveTxPowerChannel, channel);
   storeRelaxed(&txPowerSetStatus, static_cast<int32_t>(setStatus));
   storeRelaxed(&txPowerGetStatus, static_cast<int32_t>(getStatus));
   uint8_t flags = 0x01;
@@ -127,8 +130,10 @@ void recordTxPower(int8_t requestedQdbm, esp_err_t setStatus,
   storeRelaxed(&txPowerFlags, flags);
 }
 
-void recordEffectiveTxPower(int8_t effectiveQdbm, esp_err_t getStatus) {
+void recordEffectiveTxPower(int8_t effectiveQdbm, esp_err_t getStatus,
+                            uint8_t channel) {
   storeRelaxed(&effectiveTxPowerQdbm, effectiveQdbm);
+  storeRelaxed(&effectiveTxPowerChannel, channel);
   storeRelaxed(&txPowerGetStatus, static_cast<int32_t>(getStatus));
   uint8_t flags = loadRelaxed(&txPowerFlags) & 0x01;
   if (getStatus == ESP_OK)
@@ -155,6 +160,7 @@ Snapshot snapshot() {
   result.txBytes = loadRelaxed(&txBytes);
   result.requestedTxPowerQdbm = loadRelaxed(&requestedTxPowerQdbm);
   result.effectiveTxPowerQdbm = loadRelaxed(&effectiveTxPowerQdbm);
+  result.effectiveTxPowerChannel = loadRelaxed(&effectiveTxPowerChannel);
   result.txPowerSetStatus =
       static_cast<esp_err_t>(loadRelaxed(&txPowerSetStatus));
   result.txPowerGetStatus =

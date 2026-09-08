@@ -166,6 +166,12 @@ int8_t mappedQuarterDbm(int8_t requested) {
   return 8;
 }
 
+int8_t channelTxGoalQuarterDbm(int8_t mapped_request, uint8_t channel) {
+  // ESP32-C5 target output is capped at 18 dBm on 5 GHz even when the common
+  // Wi-Fi API request maps to the generic 20 dBm ceiling.
+  return channel > 14 && mapped_request > 72 ? 72 : mapped_request;
+}
+
 void truncateEvilPortalLine(char* line, size_t capacity) {
   if (line == nullptr || capacity <= EVIL_PORTAL_LINE_CHARS)
     return;
@@ -4055,7 +4061,8 @@ bool WiFiScan::startWiFiAttacks(uint8_t scan_mode, uint16_t color,
   const esp_err_t get_power_status =
       esp_wifi_get_max_tx_power(&effective_tx_power);
   RadioDiagnostics::recordTxPower(MAX_WIFI_TX_POWER_QDBM, status,
-                                  effective_tx_power, get_power_status);
+                                  effective_tx_power, get_power_status,
+                                  this->set_channel);
   if (status != ESP_OK) {
     Serial.printf("[WiFi Attack] max TX power request: %s\n",
                   esp_err_to_name(status));
@@ -6582,7 +6589,8 @@ void WiFiScan::RunRadioDiagnostics(bool do_display, bool reset_traffic) {
       ? esp_wifi_get_max_tx_power(&live_power)
       : ESP_ERR_INVALID_STATE;
   if (live_power_status == ESP_OK)
-    RadioDiagnostics::recordEffectiveTxPower(live_power, live_power_status);
+    RadioDiagnostics::recordEffectiveTxPower(live_power, live_power_status,
+                                             channel);
 
   const RadioDiagnostics::Snapshot stats = RadioDiagnostics::snapshot();
   const uint32_t measured_ms = millis() - stats.startedMs;
@@ -6617,11 +6625,14 @@ void WiFiScan::RunRadioDiagnostics(bool do_display, bool reset_traffic) {
   char mapped_power[12] = "N/A";
   char effective_power[12] = "N/A";
   int8_t mapped_requested_power = 0;
+  int8_t channel_goal_power = 0;
   if (stats.requestedTxPowerValid) {
     formatQuarterDbm(stats.requestedTxPowerQdbm, requested_power,
                      sizeof(requested_power));
     mapped_requested_power = mappedQuarterDbm(stats.requestedTxPowerQdbm);
-    formatQuarterDbm(mapped_requested_power, mapped_power,
+    channel_goal_power = channelTxGoalQuarterDbm(
+        mapped_requested_power, stats.effectiveTxPowerChannel);
+    formatQuarterDbm(channel_goal_power, mapped_power,
                      sizeof(mapped_power));
   }
   if (stats.effectiveTxPowerValid)
@@ -6634,6 +6645,14 @@ void WiFiScan::RunRadioDiagnostics(bool do_display, bool reset_traffic) {
                 static_cast<unsigned>(channel), promiscuous ? "ON" : "OFF");
   Serial.printf("Protocols configured: %s (bitmap 0x%02X)\n",
                 protocol_text.c_str(), static_cast<unsigned>(protocols));
+  if (stats.effectiveTxPowerChannel > 0) {
+    Serial.printf("TX power context: channel=%u; band=%s\n",
+                  static_cast<unsigned>(stats.effectiveTxPowerChannel),
+                  stats.effectiveTxPowerChannel > 14 ? "5 GHz" : "2.4 GHz");
+  }
+  else {
+    Serial.println(F("TX power context: channel/band unavailable"));
+  }
   if (stats.requestedTxPowerValid) {
     Serial.printf("TX power: request-raw=%d (%s dBm nominal); "
                   "mapped-goal=%s dBm; effective=%s dBm; set=%s",
@@ -6677,10 +6696,14 @@ void WiFiScan::RunRadioDiagnostics(bool do_display, bool reset_traffic) {
   if (stats.requestedTxPowerValid && stats.effectiveTxPowerValid) {
     if (stats.txPowerSetStatus != ESP_OK)
       Serial.println(F("TX verdict: requested cap was rejected by the driver"));
-    else if (stats.effectiveTxPowerQdbm < mapped_requested_power)
-      Serial.println(F("TX verdict: driver/regulatory cap is below the mapped goal"));
+    else if (stats.effectiveTxPowerChannel == 0)
+      Serial.println(F("TX verdict: effective cap read; band comparison unavailable"));
+    else if (stats.effectiveTxPowerQdbm < channel_goal_power)
+      Serial.println(F("TX verdict: effective cap is below the band-specific goal"));
+    else if (stats.effectiveTxPowerChannel > 14)
+      Serial.println(F("TX verdict: maximum 18 dBm 5 GHz cap confirmed"));
     else
-      Serial.println(F("TX verdict: maximum 20 dBm driver cap confirmed"));
+      Serial.println(F("TX verdict: maximum 20 dBm 2.4 GHz cap confirmed"));
   }
   else {
     Serial.println(F("TX verdict: run a TX feature before checking its power cap"));
@@ -6706,6 +6729,15 @@ void WiFiScan::RunRadioDiagnostics(bool do_display, bool reset_traffic) {
                              static_cast<unsigned>(channel),
                              protocol_text.c_str());
       display_obj.tft.setTextColor(TFT_WHITE, TFT_BLACK);
+      if (stats.effectiveTxPowerChannel > 0) {
+        display_obj.tft.printf(
+            "PWR CH:%u %s\n",
+            static_cast<unsigned>(stats.effectiveTxPowerChannel),
+            stats.effectiveTxPowerChannel > 14 ? "5G" : "2G");
+      }
+      else {
+        display_obj.tft.println(F("PWR CH:N/A"));
+      }
       display_obj.tft.printf("TX goal:%sdBm\n", mapped_power);
       display_obj.tft.printf("TX eff:%sdBm\n", effective_power);
       display_obj.tft.printf("TX:%s F:%lu %lu%%\n", tx_attempts,
@@ -11739,6 +11771,12 @@ uint8_t WiFiScan::sendDeauthFrame(const uint8_t bssid[6], int channel,
       return 0;
     }
     this->set_channel = channel;
+    int8_t channel_power = 0;
+    const esp_err_t power_status =
+        esp_wifi_get_max_tx_power(&channel_power);
+    if (power_status == ESP_OK)
+      RadioDiagnostics::recordEffectiveTxPower(channel_power, power_status,
+                                               channel);
     delay(1);
   }
 
