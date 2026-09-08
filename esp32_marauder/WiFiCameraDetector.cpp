@@ -10,6 +10,7 @@
 #include <esp_wifi.h>
 
 #include "Display.h"
+#include "RadioDiagnostics.h"
 #include "Switches.h"
 
 extern Display display_obj;
@@ -394,6 +395,7 @@ void promiscuousCallback(void* buffer, wifi_promiscuous_pkt_type_t type) {
     return;
 
   const auto* packet = static_cast<wifi_promiscuous_pkt_t*>(buffer);
+  RadioDiagnostics::recordRx(packet, type);
   const uint8_t* payload = packet->payload;
   const uint16_t length = packet->rx_ctrl.sig_len;
   if (length < 24)
@@ -594,6 +596,7 @@ esp_err_t startPassiveScan() {
   wifi_promiscuous_filter_t filter{};
   filter.filter_mask = WIFI_PROMIS_FILTER_MASK_MGMT |
                        WIFI_PROMIS_FILTER_MASK_DATA;
+  RadioDiagnostics::resetTraffic(millis());
   esp_err_t error = esp_wifi_set_promiscuous_filter(&filter);
   if (error == ESP_OK)
     error = esp_wifi_set_promiscuous_rx_cb(promiscuousCallback);

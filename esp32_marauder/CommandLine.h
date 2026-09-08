@@ -74,6 +74,7 @@ const char PROGMEM SCREENSHOT_CMD[] = "screenshot";
 const char PROGMEM EVIL_PORTAL_CMD[] = "evilportal";
 const char PROGMEM KARMA_CMD[] = "karma";
 const char PROGMEM PACKET_COUNT_CMD[] = "packetcount";
+const char PROGMEM RF_DIAG_CMD[] = "rfdiag";
 const char PROGMEM SIGSTREN_CMD[] = "foxhunt";
 const char PROGMEM SCAN_ALL_CMD[] = "scanall";
 //const char PROGMEM SCANSTA_CMD[] = "scansta";
@@ -161,6 +162,8 @@ const char PROGMEM HELP_NMEA_CMD[] = "nmea";
 const char PROGMEM HELP_EVIL_PORTAL_CMD[] = "evilportal [-c start [-w html.html]/sethtml <html.html>]";
 const char PROGMEM HELP_KARMA_CMD[] = "karma -p <index>";
 const char PROGMEM HELP_PACKET_COUNT_CMD[] = "packetcount";
+const char PROGMEM HELP_RF_DIAG_CMD[] =
+    "rfdiag [-r] - show/reset effective TX and observed RX diagnostics";
 const char PROGMEM HELP_SIGSTREN_CMD[] = "foxhunt -b/-w";
 const char PROGMEM HELP_SCAN_ALL_CMD[] = "scanall";
 //const char PROGMEM HELP_SCANSTA_CMD[] = "scansta";

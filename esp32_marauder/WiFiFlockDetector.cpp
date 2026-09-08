@@ -21,6 +21,7 @@
 #include <esp_wifi.h>
 
 #include "configs.h"
+#include "RadioDiagnostics.h"
 
 #if defined(MARAUDER_MINI_V3) && defined(HAS_SCREEN) && \
     defined(HAS_BUTTONS) && (U_BTN >= 0) && (D_BTN >= 0) && \
@@ -542,6 +543,10 @@ void updateResult(const Match& match) {
 }
 
 void promiscuousCallback(void* buffer, wifi_promiscuous_pkt_type_t type) {
+  if (buffer == nullptr)
+    return;
+  RadioDiagnostics::recordRx(
+      static_cast<wifi_promiscuous_pkt_t*>(buffer), type);
   Match match{};
   if (matchPacket(static_cast<wifi_promiscuous_pkt_t*>(buffer), type, match))
     updateResult(match);
@@ -664,6 +669,7 @@ esp_err_t startPassiveScan() {
   wifi_promiscuous_filter_t filter{};
   filter.filter_mask = WIFI_PROMIS_FILTER_MASK_MGMT |
                        WIFI_PROMIS_FILTER_MASK_DATA;
+  RadioDiagnostics::resetTraffic(millis());
   esp_err_t error = esp_wifi_set_promiscuous_filter(&filter);
   if (error == ESP_OK)
     error = esp_wifi_set_promiscuous_rx_cb(promiscuousCallback);

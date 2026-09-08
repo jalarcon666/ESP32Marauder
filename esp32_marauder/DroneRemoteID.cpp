@@ -27,6 +27,7 @@
 
 #include "Display.h"
 #include "MiniV3Ui.h"
+#include "RadioDiagnostics.h"
 #include "Switches.h"
 
 extern Display display_obj;
@@ -354,9 +355,12 @@ void decodeWifiNan(const wifi_promiscuous_pkt_t* packet,
 }
 
 void wifiCallback(void* buffer, wifi_promiscuous_pkt_type_t type) {
-  if (type != WIFI_PKT_MGMT)
+  if (buffer == nullptr)
     return;
   const auto* packet = static_cast<wifi_promiscuous_pkt_t*>(buffer);
+  RadioDiagnostics::recordRx(packet, type);
+  if (type != WIFI_PKT_MGMT)
+    return;
   const uint8_t* payload = packet->payload;
   const uint16_t length = packet->rx_ctrl.sig_len;
   if (length < 24)
@@ -674,6 +678,7 @@ void run() {
 
   wifi_promiscuous_filter_t filter{};
   filter.filter_mask = WIFI_PROMIS_FILTER_MASK_MGMT;
+  RadioDiagnostics::resetTraffic(millis());
   esp_err_t wifiError = esp_wifi_set_promiscuous_filter(&filter);
   if (wifiError == ESP_OK)
     wifiError = esp_wifi_set_promiscuous_rx_cb(wifiCallback);

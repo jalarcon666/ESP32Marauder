@@ -23,6 +23,7 @@
 #include <esp_wifi.h>
 
 #include "Display.h"
+#include "RadioDiagnostics.h"
 #include "Switches.h"
 
 extern Display display_obj;
@@ -78,6 +79,7 @@ void wifiCallback(void* buffer, wifi_promiscuous_pkt_type_t type) {
   if (!buffer || type == WIFI_PKT_MISC)
     return;
   const auto* packet = static_cast<const wifi_promiscuous_pkt_t*>(buffer);
+  RadioDiagnostics::recordRx(packet, type);
   portENTER_CRITICAL_ISR(&activityMux);
   dwellFrames++;
   dwellRssiSum += packet->rx_ctrl.rssi;
@@ -277,8 +279,10 @@ void runTool(bool detector) {
   wifi_promiscuous_filter_t filter{};
   filter.filter_mask = WIFI_PROMIS_FILTER_MASK_ALL;
   esp_err_t wifiError = esp_wifi_set_promiscuous_filter(&filter);
-  if (wifiError == ESP_OK)
+  if (wifiError == ESP_OK) {
+    RadioDiagnostics::resetTraffic(millis());
     wifiError = esp_wifi_set_promiscuous_rx_cb(wifiCallback);
+  }
   if (wifiError == ESP_OK)
     wifiError = esp_wifi_set_channel(1, WIFI_SECOND_CHAN_NONE);
   if (wifiError == ESP_OK)
